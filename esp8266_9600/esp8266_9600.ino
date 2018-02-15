@@ -3,37 +3,37 @@
 void setup()
 {
   // Setup serial monitor wait for available.
-  Serial.begin(115200);
+  Serial.begin(9600);
   while(!Serial); 
 
   // Open serial communications and wait for port to open:
   //serial 2 is to esp8266 
-  Serial2.begin(115200);
-  Serial2.setTimeout(4000);
-  while(!Serial2);
+  Serial3.begin(115200);
+  Serial3.setTimeout(4000);
+  while(!Serial3);
   // Not sure if these two are needed . . .
-  Serial2.flush();
-  while(Serial2.available() > 0) Serial2.read();
+  Serial3.flush();
+  while(Serial3.available() > 0) Serial3.read();
 
-  if (!sendCmdAndRead(Serial2, "AT", "OK", "")) {
+  if (!sendCmdAndRead(Serial3, "AT", "OK", "")) {
     Serial.println("Hmm, not responding");
     while(1);
   }
   
-  if (!sendCmdAndRead(Serial2, "AT+IPR=9600", "OK", "")) {
+  if (!sendCmdAndRead(Serial3, "AT+UART_DEF=9600,8,1,0,0", "OK", "")) {
     Serial.println("Hmm, not responding");
     while(1);
   }
 
-  Serial2.end();
+  Serial3.end();
 
-  Serial2.begin(9600);
-  while(!Serial2);
+  Serial3.begin(9600);
+  while(!Serial3);
   // Not sure if these two are needed . . .
-  Serial2.flush();
-  while(Serial2.available() > 0) Serial2.read();
+  Serial3.flush();
+  while(Serial3.available() > 0) Serial3.read();
 
-  if (!sendCmdAndRead(Serial2, "AT", "OK", "")) {
+  if (!sendCmdAndRead(Serial3, "AT", "OK", "")) {
     Serial.println("Hmm, not responding");
     while(1);
   }
@@ -63,8 +63,8 @@ bool sendCmdAndReadWDelay(Stream& stream, String cmd, int delayTime, String wait
       Serial.write(c);
       readbuff += c;
     }
-//    Serial.write("RB: ");
-//    Serial.write(readbuff.c_str());
+    Serial.write("RB: ");
+    Serial.write(readbuff.c_str());
     match += readbuff;
     readbuff = "";
     if (match.indexOf(waitString) != -1) break;
@@ -82,8 +82,33 @@ bool sendCmdAndReadWDelay(Stream& stream, String cmd, int delayTime, String wait
 
 void loop()
 {
+  String line = readSerial(Serial);
+  Serial.println(line);
+  if (line.length() > 0) {
+    sendCmdAndRead(Serial3, line, "OK", "");
+  }
    delay(10000);
+   
 }
 
+String readSerial(Stream& stream)
+{
+  String result = "";
+  while (true) {
+    int av = stream.available();
+    while (av-- > 0) {
+      char c = stream.read();
+//      Serial.print(c, HEX);
+      if (c == '\r') {
+        if (stream.peek() == '\n') stream.read();
+        Serial.println();
+        return result;
+      }
+      result += c;
+    }
+    delay(100);
+    if (!stream.available() && result.length() > 0) return result;
+  }
+}
 
 

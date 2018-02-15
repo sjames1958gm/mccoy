@@ -63,7 +63,7 @@ char getInput(String& selection) {
       selection = currDir;
       break;
     case CHG_DIR:
-      selection = "/";
+      selection = "/exercises";
       break;
     case SHOW_FILE:
       selection = "test.txt";

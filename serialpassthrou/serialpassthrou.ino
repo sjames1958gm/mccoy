@@ -18,9 +18,10 @@ SdFat SD;
 
 void setup() {
   // put your setup code here, to run once:
-  Serial.begin(115200);
+  Serial.begin(9600);
   while(!Serial); 
 
+  pinMode(LED_BUILTIN, OUTPUT);
   
   // Open serial communications and wait for port to open:
   Serial2.begin(BAUD_RATE);
@@ -41,8 +42,8 @@ void loop() {
   boolean respond = false;
   boolean hasBody;
   String requestLine;
-  
-  if (readHeaders(Serial2, hasBody, requestLine)) {
+  int bodyLength;
+  if (readHeaders(Serial2, hasBody, requestLine, bodyLength)) {
     if (hasBody) readBody(Serial2);
     int method;
     String path;
@@ -83,11 +84,12 @@ boolean readHeaders(Stream& stream, boolean& hasBody, String& requestLine, int& 
   {
     hdr = readLine(stream);
     Serial.print("H: ");
-    Serial.println(hdr);
+    Serial.println(hdr + " : " + hdr.length() );
     // If HEAD this doesn't count.
     if (requestLine.length() == 0) requestLine = hdr;
-    if (hdr.indexOf("Content") != -1) hasBody = true;
-    if (hdr.toLowerCase().indexOf("content-length") != -1) {
+    hdr.toLowerCase();
+    if (hdr.indexOf("content-length") != -1) {
+      hasBody = true;
       bodyLength = processContentLength(hdr);
     }
   }
@@ -115,18 +117,21 @@ boolean readBody(Stream& stream)
 
 String readLine(Stream& stream)
 {
+  digitalWrite(LED_BUILTIN, HIGH);
   String result = "";
   while (true) {
     int av = stream.available();
     while (av-- > 0) {
       char c = stream.read();
-      Serial.print(c, HEX);
+      Serial.print("C: ");
+      Serial.println(c, HEX);
       if (c == '\r') {
         if (stream.peek() == '\n') stream.read();
-        Serial.println();
         return result;
       }
-      result += c;
+      // Getting sporadic zeros on serial interface
+      if (c != 0) result += c;
+//      if (c == 0 && result.length() == 0) return "";
     }
     delay(10);
   }
@@ -166,6 +171,7 @@ boolean handleGet(Stream& stream, String& path)
 
   if (path.equalsIgnoreCase("/exercises")) {
     String data = readDirectory(exercisesDir);
+    Serial.println(data);
     if (data.length() == 0) {
       send500Response(stream);
     }
@@ -210,12 +216,15 @@ int processContentLength(String hdr) {
 }
 
 void send200Response(Stream& stream, String data) {
-  stream.println("HTTP/1.1 200 OK");
-  stream.println("Connection: close");
-  stream.println("Content-type: text/plain");
-  stream.println();
-  stream.println(data);
-  stream.println();
+  Serial.print("Send : "); Serial.println(data);
+  stream.write(data.length());
+  stream.print(data);
+//  stream.println("HTTP/1.1 200 OK");
+//  stream.println("Connection: close");
+//  stream.println("Content-type: text/plain");
+//  stream.println();
+//  stream.println(data);
+//  stream.println();
 }
 
 void send500Response(Stream& stream) {

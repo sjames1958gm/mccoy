@@ -5,10 +5,12 @@
 #define PORT "9999"
 #define RESET_PIN 8
 const int ConnectRetries = 5;
-#define BAUD_RATE 115200
+#define BAUD_RATE 9600
+
+#define wifi Serial3
 
 boolean connected = false;
- 
+
 void setup()
 {
   // Setup serial monitor wait for available.
@@ -21,57 +23,57 @@ void setup()
 //  delay(500);
 //  digitalWrite(RESET_PIN, HIGH);
 //  delay(1000);
-  
 
   // Open serial communications and wait for port to open:
-  //serial 2 is to esp8266 
-  Serial2.begin(BAUD_RATE);
-  Serial2.setTimeout(4000);
-  while(!Serial2);
+  wifi.begin(BAUD_RATE);
+  wifi.setTimeout(4000);
+  while(!wifi);
   // Not sure if these two are needed . . .
-  Serial2.flush();
-  while(Serial2.available() > 0) Serial2.read();
+  wifi.flush();
+  while(wifi.available() > 0) wifi.read();
 
-  if (!sendCmdAndRead(Serial2, "AT", "OK", "")) {
+  Serial.println("Start up");
+  
+  if (!sendCmdAndRead(wifi, "AT", "OK", "")) {
     Serial.println("Hmm, not responding");
     while(1);
   }
 
-  Serial.println("Reset module S/W");
-  if (resetModule(Serial2)) {
-    Serial.println("Module is ready");
-  }
+//  Serial.println("Reset module S/W");
+//  if (resetModule(wifi)) {
+//    Serial.println("Module is ready");
+//  }
 
-  setAccessPointMode();
+  setAccessPointMode(wifi);
 
-  sendCmdAndRead(Serial2, "AT+GMR", "OK", "");
-   return;
-  connected = connectWiFi(ConnectRetries);
+  sendCmdAndRead(wifi, "AT+GMR", "OK", "");
+//   return;
+  connected = connectWiFi(wifi, ConnectRetries);
 
   if (!connected){
     Serial.println("Failed to connect to Wifi");
   }
 
   Serial.println("Connected to WiFi");
-  sendCmdAndRead(Serial2, "AT+CIFSR", "OK", "");
+//  sendCmdAndRead(wifi, "AT+CIFSR", "OK", "");
 
   // set the single connection mode
   Serial.println("");
-  sendCmdAndWait(Serial2, "AT+CIPMUX=0", "OK");
+  sendCmdAndWait(wifi, "AT+CIPMUX=0", "OK");
 }
 
 
 // Haven't gotten this to work
 boolean resetModule(Stream& stream) {
   while(true) {
-    if (sendCmdAndRead(Serial2, "AT+RST", "ready", "")) {
+    if (sendCmdAndRead(wifi, "AT+RST", "ready", "")) {
       return true;
     }
     while(1);
   }
 }
 
-boolean connectWiFi(int retries)
+boolean connectWiFi(Stream& wifi, int retries)
 {
   for(int i = 0; i < retries ; i++)
   {
@@ -82,7 +84,7 @@ boolean connectWiFi(int retries)
     cmd+=PASS;
     cmd+="\"";
 
-    if (sendCmdAndReadWDelay(Serial2, cmd, 1500, "OK", "")) {
+    if (sendCmdAndReadWDelay(wifi, cmd, 1500, "OK", "")) {
       return true;
     } 
     delay(1000);
@@ -107,13 +109,13 @@ boolean disconnectTcp(Stream& stream) {
   return sendCmdAndRead(stream, "AT+CIPCLOSE", "OK", "ERROR");
 }
 
-boolean setAccessPointMode() {
-  return sendCmdAndRead(Serial2, "AT+CWMODE=1", "OK", "");
+boolean setAccessPointMode(Stream& wifi) {
+  return sendCmdAndRead(wifi, "AT+CWMODE=1", "OK", "");
 }
   
 bool sendCmdAndWait(Stream& stream, String cmd, String waitString) {
   Serial.println(cmd);
-  stream.println(cmd);
+  stream.println(cmd + "\r\n");
 
   if (stream.find((char*)waitString.c_str())) return true;
   return false;
@@ -126,37 +128,21 @@ bool sendCmdAndRead(Stream& stream, String cmd, String waitString, String errorS
 bool sendCmdAndReadWDelay(Stream& stream, String cmd, int delayTime, String waitString, String errorString) {
   Serial.print("C: ");
   Serial.println(cmd);
-  stream.println(cmd);
+  stream.print(cmd + "\r\n");
   if (delayTime > 0) delay(delayTime);
   int retries = 10;
-  while (!stream.available()) {
-    delay(10);
-  }
-  String match;
-  String readbuff;
-  int av = stream.available();
-  
-  while (av > 0) {
-    Serial.println(av);
-    while (av-- > 0) {
-      char c = stream.read();
-      Serial.write(c);
-      readbuff += c;
-    }
-//    Serial.write("RB: ");
-//    Serial.write(readbuff.c_str());
-    match += readbuff;
-    readbuff = "";
-    if (match.indexOf(waitString) != -1) break;
-    delay(500);
-    av = stream.available();
-  }
 
-  Serial.println(match.c_str());
-  Serial.println(match.indexOf(waitString) != -1 ? "match" : "no match");
-  Serial.flush();
-  delay(1000);
-  return match.indexOf(waitString) != -1;
+  String resp = "";
+  String line = readLine(stream);
+  while (true) {
+    Serial.println(line);
+    if (line.indexOf("OK")) {
+      resp += "\n";
+      resp += line;
+      return resp.indexOf(waitString) != -1;
+    }
+    line = readLine(stream);
+  }
 }
 
 
@@ -165,9 +151,9 @@ void loop()
   if (!connected) return;
   do 
   {
-    isConnected(Serial2);
+    isConnected(wifi);
     
-    if (!connectTcp(Serial2, DST_IP, PORT)) {
+    if (!connectTcp(wifi, DST_IP, PORT)) {
       Serial.println("Failed to connect");
       while(1);
     }
@@ -181,28 +167,28 @@ void loop()
       data += buffer[i];
     }
 
-    Serial2.print("AT+CIPSEND=");
-    Serial2.println(data.length());
+    wifi.print("AT+CIPSEND=");
+    wifi.println(data.length());
   
-  if(Serial2.find((char*)">"))
+  if(wifi.find((char*)">"))
   {
     Serial.print(">");
   }
   else
   {
-    Serial2.println("AT+CIPCLOSE");
+    wifi.println("AT+CIPCLOSE");
     Serial.println("command timeout");
     delay(10000);
     break;
   }
 
-  if (sendCmdAndWait(Serial2, data, "OK"))
+  if (sendCmdAndRead(wifi, data, "OK", ""))
   {
-    while (!Serial2.available());
+    while (!wifi.available());
 
-    while (Serial2.available())
+    while (wifi.available())
     {
-      char c = Serial2.read();
+      char c = wifi.read();
       Serial.print(c);
       if(c=='\r') Serial.print('\n');
     }
@@ -215,7 +201,8 @@ void loop()
     delay(10000);
 }
 
-void cmdLoopMode() {
+void cmdLoopMode(Stream& wifi) {
+  
   int av = Serial.available();
   if (av == 0) return;
   Serial.println(av);
@@ -233,7 +220,29 @@ void cmdLoopMode() {
   Serial.print("C: ");
   Serial.println(readbuff);
 
-  sendCmdAndRead(Serial2, readbuff, "OK", "");
+  sendCmdAndRead(wifi, readbuff, "OK", "");
     
 }
 
+String readLine(Stream& stream)
+{
+  String result = "";
+  int timeout = 0;
+  while (true) {
+    int av = stream.available();
+    while (av-- > 0) {
+      timeout = 0;
+      char c = stream.read();
+      Serial.print(c, HEX);
+      if (c == '\r') {
+        if (stream.peek() == '\n') stream.read();
+        Serial.println();
+        return result;
+      }
+      result += c;
+    }
+    timeout += 10;
+    if (timeout > 200) return result;
+    delay(10);
+  }
+}
