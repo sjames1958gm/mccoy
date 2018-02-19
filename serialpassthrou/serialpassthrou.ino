@@ -11,7 +11,28 @@
 #define METHOD_HEAD 3
 #define METHOD_OTHER 4
 
+#define LED1 8
+#define LED2 9
+#define LED3 10
+
 #define exercisesDir "exercises"
+typedef String (*HandlerFunction)(Stream&, String, String);
+
+String routeExercises(Stream&, String, String);
+String routeExercise(Stream&, String, String);
+String routeLed(Stream&, String, String);
+
+typedef struct {
+  String path;
+  HandlerFunction fn;
+} Route;
+
+Route getroutes[] = {
+  {"/exercises", routeExercises},
+  {"/exercise", routeExercise},
+  {"/led", routeLed},
+  {"", NULL}  
+};
 
 boolean sdCardInitialized = false;
 SdFat SD;
@@ -22,6 +43,9 @@ void setup() {
   while(!Serial); 
 
   pinMode(LED_BUILTIN, OUTPUT);
+  pinMode(LED1, OUTPUT);
+  pinMode(LED2, OUTPUT);
+  pinMode(LED3, OUTPUT);
   
   // Open serial communications and wait for port to open:
   Serial2.begin(BAUD_RATE);
@@ -67,9 +91,10 @@ void loop() {
 
   if (respond) {
     Serial.println("=====");
-    Serial2.println("HTTP/1.1 200 OK");
-    Serial2.println("Connection: close");
-    Serial2.println();
+    sendResponse(Serial2, 404, "Not Found");
+//    Serial2.println("HTTP/1.1 200 OK");
+//    Serial2.println("Connection: close");
+//    Serial2.println();
   }
 }
 
@@ -123,8 +148,8 @@ String readLine(Stream& stream)
     int av = stream.available();
     while (av-- > 0) {
       char c = stream.read();
-      Serial.print("C: ");
-      Serial.println(c, HEX);
+//      Serial.print("C: ");
+//      Serial.println(c, HEX);
       if (c == '\r') {
         if (stream.peek() == '\n') stream.read();
         return result;
@@ -165,22 +190,30 @@ boolean handleGet(Stream& stream, String& path)
   // Return true if caller should respond;
 
   if (!sdCardInitialized) {
-    send500Response(stream);
+    sendResponse(stream, 500, "SD Card not initialized");
     return false;
   }
 
-  if (path.equalsIgnoreCase("/exercises")) {
-    String data = readDirectory(exercisesDir);
-    Serial.println(data);
-    if (data.length() == 0) {
-      send500Response(stream);
-    }
-    else {  
-      send200Response(stream, data);
-    }
-    return false;
+  String route = path;
+  String extra = "";
+  int ndx = path.indexOf("/", 1);
+  if (ndx != -1) {
+    route = path.substring(0, ndx);
+    extra = path.substring(ndx + 1);
   }
-  return true;
+
+  Route* r = &getroutes[0];
+  while (r->fn != NULL) {
+    if (r->path.equals(route)) {
+      (*r->fn)(Serial2, route, extra);
+      return;
+    }
+    *r++;
+  }
+
+  sendResponse(Serial2, 404, "Not Found");
+  
+  return false;
 }
 
 String readDirectory(String path) {
@@ -211,25 +244,120 @@ String readDirectory(String path) {
   return response;
 }
 
+String readFile(String directory, String file) {
+  Serial.print("Read file: ");
+  String path = directory + "/" + file;
+  Serial.println(path);
+  String response = "";
+  if (!SD.chdir(directory.c_str())) {
+    Serial.println("Could not change to directory: ");
+    Serial.println(directory);
+  }
+  else {
+    File fn = SD.open(file);
+    if (!fn) {
+      Serial.print("Could not open file: ");
+      Serial.println(file);
+    }
+    else 
+    {
+      // read from the file until there's nothing else in it:
+      while (fn.available()) {
+        response += (char)fn.read();
+      }
+      // close the file:
+      fn.close();
+      Serial.println(response);
+    }
+  }
+  return response;
+}
+
 int processContentLength(String hdr) {
   return 0;
 }
 
-void send200Response(Stream& stream, String data) {
-  Serial.print("Send : "); Serial.println(data);
-  stream.write(data.length());
-  stream.print(data);
-//  stream.println("HTTP/1.1 200 OK");
-//  stream.println("Connection: close");
-//  stream.println("Content-type: text/plain");
-//  stream.println();
-//  stream.println(data);
-//  stream.println();
+void sendResponse(Stream& stream, int status, String data)
+{
+  Serial.print("Send : "); Serial.print(data.length()); Serial.println(data);
+  char buff[10];
+  sprintf(buff, "%d", status);
+  
+  int length = data.length() + strlen(buff) + 1;
+  Serial.println(length >> 8);
+  stream.write(length >> 8);
+  Serial.println(length & 0xFF);
+  stream.write(length & 0xFF);
+  for (int i = 0; i < strlen(buff); i++) {
+    stream.print(buff[i]);
+  }
+  stream.print(':');
+  char* datac = data.c_str();
+  for (int i = 0; i < data.length(); i++) {
+    stream.print(datac[i]);
+  }
 }
 
-void send500Response(Stream& stream) {
-  stream.println("HTTP/1.1 500 Server Error");
-  stream.println("Connection: close");
-  stream.println();
+String getSensorList() {
+  return "sensor1, sensor2";
+}
+
+String routeExercises(Stream& stream, String path, String extra) {
+  String data = readDirectory(exercisesDir);
+  Serial.println(data);
+  if (data.length() == 0) {
+    sendResponse(stream, 500, "Server Error");
+  }
+  else {  
+    sendResponse(stream, 200, data);
+  }
+  return "";
+}
+
+String routeExercise(Stream& stream, String path, String extra) {
+  String data = readFile(exercisesDir, extra);
+  Serial.println(data);
+  if (data.length() == 0) {
+    sendResponse(stream, 500, "Server Error");
+  }
+  else {  
+    sendResponse(stream, 200, data);
+  }
+  return "";
+}
+
+String routeLed(Stream& stream, String path, String extra) {
+  Serial.println(path + " path");
+  Serial.println(extra + " extra");
+  int ndx = extra.indexOf("/");
+  if (ndx == -1) {
+    sendResponse(stream, 404, "Not Found");
+  } 
+  else {
+ 
+    int state = extra.substring(0, ndx).equals("on") ? HIGH : LOW;
+    int led = atoi(extra.substring(ndx + 1).c_str());
+    Serial.println(state);
+    Serial.println(led);
+    switch (led) {
+      case 1:
+        digitalWrite(LED1, state);
+        sendResponse(stream, 200, "OK");
+        break;
+      case 2:
+        digitalWrite(LED2, state);
+        sendResponse(stream, 200, "OK");
+        break;
+      case 3:
+        digitalWrite(LED3, state);
+        sendResponse(stream, 200, "OK");
+        break;
+      default:
+        sendResponse(stream, 404, "Not Found");
+    }
+    
+  }
+  
+  return "";
 }
 
