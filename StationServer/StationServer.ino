@@ -4,7 +4,8 @@
 #include <ESP8266mDNS.h>
 
 #define BAUD_RATE 9600
-
+// Send marker before sending message as a primitive sync mechanism
+#define MARKER "#"
 const char* ssid = "ATTVMb9amS";
 const char* password = "xmcpmjhvr7u7";
 
@@ -35,8 +36,10 @@ void handleNotFound(){
   digitalWrite(led, 0);
 }
 
+// Send message over serial to arduino
 void handleSerial() {
-  String request = (server.method() == HTTP_GET)?"GET ":"POST ";
+  String request = MARKER;
+  request += (server.method() == HTTP_GET)?"GET ":"POST ";
   request += server.uri();
   request += " \r\n\r\n";
   Serial.print(request);
