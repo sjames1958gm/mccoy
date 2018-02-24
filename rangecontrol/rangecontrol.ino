@@ -11,26 +11,46 @@
 #define METHOD_HEAD 3
 #define METHOD_OTHER 4
 
+// LEDs for testing
 #define LED1 8
 #define LED2 9
 #define LED3 10
 
+// MARKER is the first character for a new message (sync character?)
+#define MARKER '#'
+
+// Define exercises directory name
 #define exercisesDir "exercises"
-typedef String (*HandlerFunction)(Stream&, String, String);
 
-String routeExercises(Stream&, String, String);
-String routeExercise(Stream&, String, String);
-String routeLed(Stream&, String, String);
+// Handler function typedefs for Route table
+typedef String (*GetHandlerFunction)(Stream& stream, String path, String extra);
+typedef String (*PostHandlerFunction)(Stream& stream, String path, String extra, String body);
 
+// Forward defs for route handlers
+String getExercises(Stream&, String, String);
+String getExercise(Stream&, String, String);
+String getLed(Stream&, String, String);
+
+// Get Route table structure
 typedef struct {
   String path;
-  HandlerFunction fn;
-} Route;
+  GetHandlerFunction fn;
+} GetRoute;
 
-Route getroutes[] = {
-  {"/exercises", routeExercises},
-  {"/exercise", routeExercise},
-  {"/led", routeLed},
+GetRoute getroutes[] = {
+  {"/exercises", getExercises}, // Get list of exercises
+  {"/exercise", getExercise}, // Get exercise file
+  {"/led", getLed}, // test led on/off
+  {"", NULL}  
+};
+
+// Get Route table structure
+typedef struct {
+  String path;
+  PostHandlerFunction fn;
+} PostRoute;
+
+PostRoute postroutes[] = {
   {"", NULL}  
 };
 
@@ -42,12 +62,13 @@ void setup() {
   Serial.begin(9600);
   while(!Serial); 
 
-  pinMode(LED_BUILTIN, OUTPUT);
+  // Test LEDs set for output
   pinMode(LED1, OUTPUT);
   pinMode(LED2, OUTPUT);
   pinMode(LED3, OUTPUT);
   
   // Open serial communications and wait for port to open:
+  // Serial communication to Wifi chip
   Serial2.begin(BAUD_RATE);
   while(!Serial2);
 
@@ -62,16 +83,22 @@ void setup() {
 }
 
 void loop() {
-  // put your main code here, to run repeatedly:
+  // Default response needed?
   boolean respond = false;
+  // Does message have body
   boolean hasBody;
+  // Request line from message
   String requestLine;
   int bodyLength;
+  String body;
+  
   if (readHeaders(Serial2, hasBody, requestLine, bodyLength)) {
-    if (hasBody) readBody(Serial2);
+    if (hasBody) readBody(Serial2, bodyLength, body);
+    
     int method;
     String path;
     processRequestLine(requestLine, method, path);
+    
     Serial.println(method);
     Serial.println(path);
     switch (method) {
@@ -79,9 +106,11 @@ void loop() {
         respond = handleGet(Serial2, path);
       break;
       case METHOD_POST:
-        respond = true;
+        // Not implemented
+        respond = handlePost(Serial2, path);
       break;
-      case METHOD_HEAD:
+      case METHOD_HEAD:     
+        // Not implemented
         respond = true;
       break;
       default:
@@ -90,18 +119,17 @@ void loop() {
   }
 
   if (respond) {
-    Serial.println("=====");
     sendResponse(Serial2, 404, "Not Found");
-//    Serial2.println("HTTP/1.1 200 OK");
-//    Serial2.println("Connection: close");
-//    Serial2.println();
   }
 }
 
 boolean readHeaders(Stream& stream, boolean& hasBody, String& requestLine, int& bodyLength)
 {
   if (!stream.available()) return false;
+  if (!readMarker(stream)) return false;
+  
   Serial.println("readHeaders");
+  
   requestLine = "";
   String hdr;
   hasBody = false;
@@ -124,17 +152,19 @@ boolean readHeaders(Stream& stream, boolean& hasBody, String& requestLine, int& 
   return true;
 }
 
-boolean readBody(Stream& stream)
+boolean readBody(Stream& stream, int bodyLength, String& body)
 {
   Serial.println("readBody");
-  String body;
+  String data;
+  body = "";
   do 
   {
-    body = readLine(stream);
+    data = readLine(stream);
     Serial.print("B: ");
-    Serial.println(body);
+    Serial.println(data);
+    body += data;
   }
-  while (body.length() != 0);
+  while (body.length() < bodyLength);
   
   Serial.println("end");
   return true;
@@ -142,14 +172,11 @@ boolean readBody(Stream& stream)
 
 String readLine(Stream& stream)
 {
-  digitalWrite(LED_BUILTIN, HIGH);
   String result = "";
   while (true) {
     int av = stream.available();
     while (av-- > 0) {
       char c = stream.read();
-//      Serial.print("C: ");
-//      Serial.println(c, HEX);
       if (c == '\r') {
         if (stream.peek() == '\n') stream.read();
         return result;
@@ -202,7 +229,7 @@ boolean handleGet(Stream& stream, String& path)
     extra = path.substring(ndx + 1);
   }
 
-  Route* r = &getroutes[0];
+  GetRoute* r = &getroutes[0];
   while (r->fn != NULL) {
     if (r->path.equals(route)) {
       (*r->fn)(Serial2, route, extra);
@@ -213,6 +240,12 @@ boolean handleGet(Stream& stream, String& path)
 
   sendResponse(Serial2, 404, "Not Found");
   
+  return false;
+}
+
+boolean handlePost(Stream& stream, String& path) 
+{
+  sendResponse(Serial2, 404, "Not Found");
   return false;
 }
 
@@ -302,7 +335,7 @@ String getSensorList() {
   return "sensor1, sensor2";
 }
 
-String routeExercises(Stream& stream, String path, String extra) {
+String getExercises(Stream& stream, String path, String extra) {
   String data = readDirectory(exercisesDir);
   Serial.println(data);
   if (data.length() == 0) {
@@ -314,7 +347,7 @@ String routeExercises(Stream& stream, String path, String extra) {
   return "";
 }
 
-String routeExercise(Stream& stream, String path, String extra) {
+String getExercise(Stream& stream, String path, String extra) {
   String data = readFile(exercisesDir, extra);
   Serial.println(data);
   if (data.length() == 0) {
@@ -326,7 +359,7 @@ String routeExercise(Stream& stream, String path, String extra) {
   return "";
 }
 
-String routeLed(Stream& stream, String path, String extra) {
+String getLed(Stream& stream, String path, String extra) {
   Serial.println(path + " path");
   Serial.println(extra + " extra");
   int ndx = extra.indexOf("/");
@@ -359,5 +392,11 @@ String routeLed(Stream& stream, String path, String extra) {
   }
   
   return "";
+}
+
+bool readMarker(Stream& stream) {
+  char c = stream.read();
+  if (c == MARKER) return true;
+  return false;
 }
 
