@@ -1,7 +1,9 @@
-#include <ESP8266WiFi.h>
+ #include <ESP8266WiFi.h>
 #include <WiFiClient.h>
 #include <ESP8266WebServer.h>
 #include <ESP8266mDNS.h>
+
+#define BAUD_RATE 9600
 
 const char* ssid = "ATTVMb9amS";
 const char* password = "xmcpmjhvr7u7";
@@ -38,43 +40,60 @@ void handleSerial() {
   request += server.uri();
   request += " \r\n\r\n";
   Serial.print(request);
-
-  String response = readResponse(Serial);
-  server.send(200, "text/plain", response);
+  Serial1.println(request);
+  Serial1.print("content length: ");
+  String c = server.arg("plain");
+  Serial1.print(c.length());
+  Serial1.print("content: ");
+  Serial1.println(c);
+  
+  int status;
+  String response = readResponse(Serial, status);
+  server.sendHeader("access-control-allow-origin", "*");
+  if (response.length() > 0) {
+    server.send(status, "text/plain", response);
+  }
+  else {
+    server.send(status);
+    Serial1.print("Send response: ");
+    Serial1.print(status);
+    Serial1.print(" - ");
+    Serial1.println(response);
+  }
 }
 
 void setup(void){
   pinMode(led, OUTPUT);
   digitalWrite(led, 0);
-  Serial.begin(9600);
-  WiFi.mode(WIFI_STA);
+  Serial.begin(BAUD_RATE);
+  Serial1.begin(9600);
+  Serial1.println("test");
+  WiFi .mode(WIFI_STA);
   WiFi.begin(ssid, password);
-  Serial.println("");
-
+  Serial1.println("");
+  
   // Wait for connection
   while (WiFi.status() != WL_CONNECTED) {
     delay(500);
-    Serial.print(".");
+    Serial1.print(".");
   }
-  Serial.println("");
-  Serial.print("Connected to ");
-  Serial.println(ssid);
-  Serial.print("IP address: ");
-  Serial.println(WiFi.localIP());
+  Serial1.println("");
+  Serial1.print("Connected to ");
+  Serial1.println(ssid);
+  Serial1.print("IP address: ");
+  Serial1.println(WiFi.localIP());
 
   if (MDNS.begin("esp8266")) {
-    Serial.println("MDNS responder started");
+    Serial1.println("MDNS responder started");
   }
 
   server.on("/", handleRoot);
 
-  server.on("/inline", [](){
-    server.send(200, "text/plain", "this works as well");
+  server.on("/test", [](){
+    server.send(200, "text/plain", "test passed");
   });
 
-  server.on("/exercises", handleSerial);
-
-  server.onNotFound(handleNotFound);
+  server.onNotFound(handleSerial);
 
   server.begin();
   Serial.println("HTTP server started");
@@ -86,18 +105,32 @@ void loop(void){
   server.handleClient();
 }
 
-String readResponse(Stream& stream) {
+String readResponse(Stream& stream, int& status) {
   // Need some sort of timeout here?
+  Serial1.println("readResponse");
   String response = "";
-  while (!stream.available()) delay(10);
-  
-  unsigned char c = stream.read();
-  while (c-- > 0) {
-    while (!stream.available()) delay(10);
-    response += stream.read();
+  unsigned int length = readStream(stream);
+  Serial1.println(length, HEX);
+  length = (length << 8) + readStream(stream);
+  Serial1.println(length, HEX);
+  while (length-- > 0) {
+    response += (char)readStream(stream);
   }
+  Serial1.println(response);
 
+  status = 200;
+  int ndx = response.indexOf(":");
+  if (ndx != -1) {
+    status = atoi(response.substring(0, ndx).c_str());
+    response = response.substring(ndx + 1);
+  }
   return response;
 }
 
+unsigned char readStream(Stream& stream) {
+  while (!stream.available()) delay(10);
+  unsigned char c = stream.read();
+//  Serial1.println((int)c, HEX);
+  return c;
+}  
 
