@@ -105,7 +105,7 @@ void setup() {
   Serial.println("init complete");
 }
 
-void checkWifi() {
+void serviceWifi() {
   // Default response needed?
   boolean respond = false;
   // Does message have body
@@ -117,6 +117,7 @@ void checkWifi() {
 
   // Read haders from serial interface to Wifi chip
   if (readHeaders(Serial2, hasBody, requestLine, bodyLength)) {
+    Serial.println("reqline: " + requestLine);
     // Read body if there is one.
     if (hasBody) readBody(Serial2, bodyLength, body);
     
@@ -131,7 +132,6 @@ void checkWifi() {
         respond = handleGet(Serial2, path);
       break;
       case METHOD_POST:
-        // Not implemented
         respond = handlePost(Serial2, path, body);
       break;
       case METHOD_HEAD:     
@@ -149,7 +149,7 @@ void checkWifi() {
 }
 
 void loop() {
-  checkWifi();
+  serviceWifi();
 }
 
 boolean readHeaders(Stream& stream, boolean& hasBody, String& requestLine, int& bodyLength)
@@ -178,6 +178,8 @@ boolean readHeaders(Stream& stream, boolean& hasBody, String& requestLine, int& 
     if (hdr.indexOf("content-length") != -1) {
       hasBody = true;
       bodyLength = processContentLength(hdr);
+      Serial.println("hasBody: ");
+      Serial.println(bodyLength);
     }
   }
   while (hdr.length() != 0);
@@ -243,9 +245,12 @@ void processRequestLine(String requestLine, int& method, String& path)
   ndx = requestLine.indexOf('/', ndx);
   if (ndx == -1) return;
   int endndx = requestLine.indexOf(' ', ndx);
-  if (endndx == -1) return;
-
-  path = requestLine.substring(ndx, endndx);
+  if (endndx == -1) {
+    path = requestLine.substring(ndx);
+  }
+  else {
+    path = requestLine.substring(ndx, endndx);
+  }
 }
 
 boolean handleGet(Stream& stream, String& path) 
@@ -366,6 +371,11 @@ String readFile(String directory, String file, bool& error) {
 }
 
 int processContentLength(String hdr) {
+  int ndx = hdr.indexOf(":");
+  if (ndx != -1) {
+    String cl = hdr.substring(ndx + 1);
+    return cl.toInt();
+  }
   return 0;
 }
 
@@ -560,7 +570,8 @@ String postDir(Stream& stream, String path, String extra, String body) {
 
 String postFile(Stream& stream, String path, String extra, String body) {
   Serial.println(String("postFile ") + extra);
-
+  Serial.println(String("postFile ") + body);
+  
   String dir = "/";
   String file = "";
   int ndx = extra.lastIndexOf("/");
@@ -571,19 +582,34 @@ String postFile(Stream& stream, String path, String extra, String body) {
     dir += extra.substring(0, ndx);
     file = extra.substring(ndx + 1);
   }
-    
+
+  Serial.println(String("dir: ") + dir);
+  Serial.println(String("file: ") + file);
+
+  bool status = 500;
+  String msg = "Server Error";
   if (file.length() == 0) {
     Serial.println(String("error: no file specified: ") + extra);
     sendResponse(stream, 500, "Server Error");
   }
   else {   
-    if (false) {
-      sendResponse(stream, 200, "");
+    if (!SD.chdir(dir.c_str())) {
+      status = 404;
+      msg = "Not Found";
     }
     else {
-      sendResponse(stream, 500, "Server Error");
+      File myFile = SD.open(file, FILE_WRITE);
+      if (myFile) {
+        myFile.print(body);
+        myFile.close();
+        status = 200;
+        msg = "OK";
+      }
     }
   }
+
+  sendResponse(stream, status, msg);
+
   return "";
 }
 
