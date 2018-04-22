@@ -2,6 +2,8 @@
 #include <WiFiClient.h>
 #include <ESP8266WebServer.h>
 #include <ESP8266mDNS.h>
+#include <SdFat.h>
+#include <SdFatConfig.h>
 
 #define BAUD_RATE 9600
 // Send marker before sending message as a primitive sync mechanism
@@ -9,6 +11,9 @@
 
 const char* ssid = "ATTVMb9amS";
 const char* password = "xmcpmjhvr7u7";
+
+boolean sdCardInitialized = false;
+SdFat SD;
 
 ESP8266WebServer server(80);
 
@@ -100,7 +105,10 @@ void setup(void){
   }
 
   server.on("/", handleRoot);
+  server.on("/favicon.ico", handleRoot);
 
+  server.on("/dir", handleDir);
+  
   server.on("/test", [](){
     server.send(200, "text/plain", "test passed");
   });
@@ -111,6 +119,14 @@ void setup(void){
   Serial.println("HTTP server started");
   Serial.flush();
   Serial.swap();
+
+  // Initialized the SD card.
+  if (SD.begin(D8)) {
+    sdCardInitialized = true;
+  }
+  else {
+    Serial.println("SD Card initialization failed!");
+  }
 }
 
 void loop(void){
@@ -145,4 +161,52 @@ unsigned char readStream(Stream& stream) {
 //  Serial1.println((int)c, HEX);
   return c;
 }  
+
+String handleDir() 
+{
+  Serial1.println(readDirectory("/"));
+  /*
+  Serial.println(String("getDir ") + extra);
+
+  String dir = String("/") + extra;
+
+  String data = readDirectory(dir);
+
+  if (data.length() > 0) {
+    sendResponse(stream, 200, data);  
+  }
+  else {
+    sendResponse(stream, 404, "Not Found");  
+  }
+  */
+  return "";
+}
+
+String readDirectory(String path) {
+  Serial1.print("List Dir: ");
+  Serial1.println(path);
+  String response = "";
+  File dir = SD.open(path);
+  if (!dir) {
+    Serial1.print("Could not open directory: ");
+    Serial1.println(path);
+  }
+  else 
+  {
+    while (true) {
+      File entry =  dir.openNextFile();
+      if (! entry) {
+        // no more files
+        break;
+      }
+      if (response.length() > 0) response += ", ";
+      char name[24];
+      entry.getName(name, sizeof(name));
+      response += name;
+      entry.close();
+    }
+    dir.close();
+  }
+  return response;
+}
 
