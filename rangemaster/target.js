@@ -5,7 +5,7 @@ const fs = require('fs');
 const targetif = require('./targetif.js');
 
 const RESET = 1;
-const HELLO = 2;
+const PING = 2;
 const CMDFILE = 3;
 const HITLOG = 4;
 const DEBUGLOG = 5;
@@ -52,7 +52,8 @@ function start(target) {
         target.online = true;
         console.log(`Target: ${target.id} online`);
         target.eventcb(target, 'connected');
-        pingTarget(target);
+        resetTarget(target);
+        setTimeout(() => pingTarget(target), 2000);
       }
     },
     (handle, message) => {
@@ -89,11 +90,21 @@ function pingTarget(target) {
       console.log('??');
       return;
     }
-    targetif.send(target.handle, HELLO, 'Hello World');
+    targetif.send(target.handle, PING, '');
     setTimeout(() => pingTarget(target), 5000);
   } else {
     console.log('restart target');
     start(target);
+  }
+}
+
+function resetTarget(target) {
+  if (target.online) {
+    if (target.handle == 0) {
+      console.log('??');
+      return;
+    }
+    targetif.send(target.handle, RESET, '');
   }
 }
 

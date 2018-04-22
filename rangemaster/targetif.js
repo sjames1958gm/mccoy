@@ -118,18 +118,20 @@ function targetjs() {
   }
 
   function send(handle, cmd, message) {
-    sendVarint(handle, message.length + 1);
     sendVarint(handle, cmd & 0x7f); // ensure command is only one byte
-    handle.socket.write(Buffer.from(message));
+    sendVarint(handle, message.length);
+    if (message.length > 0) {
+      handle.socket.write(Buffer.from(message));
+    }
   }
 
   function sendVarint(handle, value) {
-    while (value > 0) {
+    do {
       let c = value & 0x7f;
       value = value >> 7;
       if (value > 0) c = c | 0x80;
       handle.socket.write(String.fromCharCode(c));
-    }
+    } while (value > 0);
   }
 
   function readVarint(buffer, value = 0, len = 0) {

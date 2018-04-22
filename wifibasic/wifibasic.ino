@@ -3,6 +3,11 @@
 
 #define DEBUG 1
 
+#define NULLCMD 0
+#define RESETCMD 1
+#define PINGCMD 2
+#define nop asm volatile ("nop\n\t")
+
 const char* ssid = "ATTVMb9amS";
 const char* password = "xmcpmjhvr7u7";
  
@@ -43,18 +48,22 @@ void setup() {
   Serial.print("Use this IP to connect: ");
   Serial.println(WiFi.localIP());
 
+  resetSlave();
   
-  pinMode(resetPin, OUTPUT);
-  digitalWrite(resetPin, LOW);
-  delay(500);
-  digitalWrite(resetPin, HIGH);
   delay(2000);
   String testString = "SPI Interface Initialized\n";
-  SPI.transfer((char)testString.length() + 1);
-  SPI.transfer((char)0);
+  SPI.transfer((char)NULLCMD);
+  SPI.transfer((char)testString.length());
   for (int i = 0; i < testString.length(); i++) {
     SPI.transfer(testString[i]);
   }
+  nop;
+  int cmd = SPI.transfer(0xFF);
+  int len = SPI.transfer(0xFF);
+
+  debugMsgInt("Command: ", cmd);
+  debugMsgInt("Length: ", len);
+  
 }
  
 void loop() {
@@ -74,46 +83,31 @@ void loop() {
     return;
   }
 
-  int size = readVarint(&client);
+  int cmd = readVarint(&client);
+  int len = readVarint(&client);
 
-  String request = readFor(&client, size);
-  Serial.println(&request[1]);
-  
-  // Match the request
- 
-//  int value = LOW;
-//  if (request.indexOf("/LED=ON") != -1)  {
-//    digitalWrite(ledPin, LOW);
-//    value = HIGH;
-//  }
-//  if (request.indexOf("/LED=OFF") != -1)  {
-//    digitalWrite(ledPin, HIGH);
-//    value = LOW;  
-//  }
+  debugMsgInt("Command: ", cmd);
+  debugMsgInt("Length: ", len);
 
-  SPI.transfer((char) request.length());
-  for (int i = 0; i < request.length(); i++) {
-    SPI.transfer(request[i]);
+  String request;
+  if (len > 0) {
+    request = readFor(&client, len);
   }
- 
-//  // Return the response
-//  String resp = "HTTP/1.1 200 OK\r\n";
-//  resp += String("Content-Type: text/html\r\n\r\n");
-//  resp += String("<!DOCTYPE HTML>\r\n");
-//  resp += String("<html>\r\n");
-// 
-//  resp += String("Led pin is now: ");
-// 
-//  if(value == HIGH) {
-//    resp += String("On\r\n");
-//  } else {
-//    resp += String("Off\r\n");
-//  }
-//  resp += String("<br><br>\r\n");
-//  resp += String("<a href=\"/LED=ON\"\"><button>Turn On </button></a>\r\n");
-//  resp += String("<a href=\"/LED=OFF\"\"><button>Turn Off </button></a><br />\r\n");  
-//  resp += String("</html>\r\n");
-
+  
+  if (cmd == NULLCMD) {
+    Serial.println(request);
+  }
+  if (cmd == RESETCMD) {
+    resetSlave();
+  }
+  else {
+    SPI.transfer((char)cmd);
+    // TODO: this needs to be send var int
+    SPI.transfer((char) request.length());
+    for (int i = 0; i < request.length(); i++) {
+      SPI.transfer(request[i]);
+    }
+  }
   
   delay(1); 
 }
@@ -129,17 +123,17 @@ int readVarint(WiFiClient* client) {
     value = ((c & 0x7f) << (len * 7)) + value;
     if (c < 128) break;
   }
-  if (DEBUG) { Serial.print("Value: "); Serial.println(value); }
+  if (DEBUG) { Serial.print("Varint: "); Serial.println(value); }
   return value;
 }
 
 void sendVarint(WiFiClient* client, unsigned int value) {
-  while (value > 0) {
+  do {
     unsigned char c = value &0x7f;
     value = value >> 7;
     if (value > 0) c = c | 0x80;
     client->write(c);
-  }
+  } while (value > 0);
 }
 
 String readFor(WiFiClient* client, unsigned int len) {
@@ -158,6 +152,20 @@ void writeFor(WiFiClient* client, String buffer) {
   int ndx = 0;
   while (ndx < buffer.length()) {
     client->write(buffer[ndx++]);
+  }
+}
+
+void resetSlave() {
+  pinMode(resetPin, OUTPUT);
+  digitalWrite(resetPin, LOW);
+  delay(500);
+  digitalWrite(resetPin, HIGH);
+}
+  
+void debugMsgInt(const char* msg, int value) {
+  if (DEBUG) {
+    Serial.print(msg);
+    Serial.println(value);
   }
 }
 
