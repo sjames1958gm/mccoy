@@ -7,32 +7,40 @@
 #define SENDCMD 5
 #define SENDLEN 6
 #define SENDDATA 7
-#define ACK 0x7F
+#define WAIT 8
 
 #define DEBUG 1
 
 char buff[1024];
-volatile byte index;
-volatile int state;  /* use reception complete flag */
+volatile int index;
+volatile int state;
 volatile int command;
+int sendCommand;
 int length;
 int lengthNdx;
-int count;
+
+int counter = 0;
 
 #define PING 2
 #define CMDFILE 3
 #define HITLOG 4
 #define DBGLOG 5
 #define STATUS 6
+#define ACK 0x7F
+
+#define LED 13
 
 void setup (void)
 {
   Serial.begin (115200);
+  Serial.println("setup start");
+  pinMode(LED, OUTPUT);
+  digitalWrite(LED, LOW);
+  
   SPCR |= bit(SPE);         /* Enable SPI */
-  pinMode(MISO, OUTPUT);    /* Make MISO pin as OUTPUT */
+  pinMode(MISO, OUTPUT);    /* Make MISO pin as OUTPUT (slave) */
 
   resetState();
-//  count = 0;
   
   SPI.attachInterrupt();    /* Attach SPI interrupt */
   Serial.println("setup complete");
@@ -42,13 +50,18 @@ void loop (void)
 {
   if (state == RCVCOMP)          /* Check and print received buffer if any */
   {
+    sendCommand = ACK;
+    state  = SENDCMD;
     buff[index] = 0;
     debugMsgInt("Command: ", command);
     debugMsgInt("Length: ", length);
-    command = ACK;
-    state  = SENDCMD;
+
     if (length > 0) {
       Serial.println(buff);
+    }
+
+    if (command == PING) {
+      digitalWrite(LED, (counter++ % 2) == 0 ? HIGH : LOW);
     }
   }
   delay(1);
@@ -63,16 +76,20 @@ ISR (SPI_STC_vect)
   switch (state) {
     case RCVCMD:
       command = c;
+      // Out of sync if command = 0xff
+      if (command == 0xff) break;
+      state = RCVLEN;
       break;
     case RCVLEN:
-      if (!receiveLength(c, &length, &lengthNdx)) {
+      if (receiveLength(c, &length, &lengthNdx)) {
         if (length > 0) {
           state = RCVDATA;
         }
         else {
-          state = SENDCMD;
+          state = RCVCOMP;
         }
       }
+      break;
     case RCVDATA:
       if (index < sizeof(buff) - 1) {
         buff[index++] = c;
@@ -82,12 +99,15 @@ ISR (SPI_STC_vect)
       }
       break;
     case SENDCMD:
-      SPDR = ACK;
+      SPDR = sendCommand;
       state = SENDLEN;
       break;
     case SENDLEN:
       SPDR = 0;
-      state = SENDLEN;
+      state = WAIT;
+      break;
+    case WAIT:
+      // Ignore recv data as it was to trigger SENDLEN
       resetState();
       break;
     default:
@@ -100,7 +120,7 @@ bool receiveLength(unsigned char c, int* length, int* lengthNdx) {
   int ndx = (*lengthNdx)++;
   int l = *length;
   *length = ((c & 0x7f) << (7 * ndx)) + l;
-  return c >= 128;
+  return c < 128;
 }
 
 void resetState() {

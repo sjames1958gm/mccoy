@@ -90,8 +90,9 @@ function pingTarget(target) {
       console.log('??');
       return;
     }
-    targetif.send(target.handle, PING, '');
-    setTimeout(() => pingTarget(target), 5000);
+    console.log(`Sending ping to ${target.id}`);
+    targetif.send(target.handle, PING, 'Ping');
+    setTimeout(() => pingTarget(target), 2000);
   } else {
     console.log('restart target');
     start(target);
@@ -104,7 +105,7 @@ function resetTarget(target) {
       console.log('??');
       return;
     }
-    targetif.send(target.handle, RESET, '');
+    // targetif.send(target.handle, RESET, '');
   }
 }
 
