@@ -3,16 +3,17 @@
 
 #define DEBUG 1
 
-#define NULLCMD 0
 #define RESETCMD 1
 #define PINGCMD 2
+#define ACK 0x7f
+
 #define nop asm volatile ("nop\n\t")
 
 const char* ssid = "ATTVMb9amS";
 const char* password = "xmcpmjhvr7u7";
  
 int ledPin = LED_BUILTIN;
-int resetPin = D3;
+int resetPin = D1;
 WiFiServer server(9000);
 WiFiClient client;
 
@@ -52,16 +53,20 @@ void setup() {
   
   delay(2000);
   String testString = "SPI Interface Initialized\n";
-  SPI.transfer((char)NULLCMD);
+  SPI.transfer((char)PINGCMD);
+  debugMsgInt("sending command: ", PINGCMD);
   SPI.transfer((char)testString.length());
+  debugMsgInt("sending length: ", testString.length());
+  
   for (int i = 0; i < testString.length(); i++) {
     SPI.transfer(testString[i]);
   }
-  nop;
+  delay(10); 
+  SPI.transfer(0xFF);
   int cmd = SPI.transfer(0xFF);
   int len = SPI.transfer(0xFF);
 
-  debugMsgInt("Command: ", cmd);
+  debugMsgInt("Rcv Command: ", cmd);
   debugMsgInt("Length: ", len);
   
 }
@@ -94,9 +99,6 @@ void loop() {
     request = readFor(&client, len);
   }
   
-  if (cmd == NULLCMD) {
-    Serial.println(request);
-  }
   if (cmd == RESETCMD) {
     resetSlave();
   }
@@ -109,6 +111,13 @@ void loop() {
     }
   }
   
+  delay(10);
+  SPI.transfer(0xFF);
+  cmd = SPI.transfer(0xFF);
+  len = SPI.transfer(0xFF);
+
+  debugMsgInt("Rcv Command: ", cmd);
+  debugMsgInt("Length: ", len);
   delay(1); 
 }
 
