@@ -5,6 +5,7 @@
 
 #define RESETCMD 1
 #define PINGCMD 2
+#define MSG 7
 #define ACK 0x7f
 
 #define nop asm volatile("nop\n\t")
@@ -55,8 +56,8 @@ void setup()
 
   delay(2000);
   String testString = "SPI Interface Initialized\n";
-  SPI.transfer((char)PINGCMD);
-  debugMsgInt("sending command: ", PINGCMD);
+  SPI.transfer((char)MSG);
+  debugMsgInt("sending command: ", MSG);
   SPI.transfer((char)testString.length());
   debugMsgInt("sending length: ", testString.length());
 
@@ -64,13 +65,21 @@ void setup()
   {
     SPI.transfer(testString[i]);
   }
-  delay(10);
-  SPI.transfer(0xFF);
-  int cmd = SPI.transfer(0xFF);
-  int len = SPI.transfer(0xFF);
-
+  delay(100);
+  unsigned char cmd = SPI.transfer(0xFF);
+  while (cmd == 0xff) {
+     cmd = SPI.transfer(0xFF);
+  }
   debugMsgInt("Rcv Command: ", cmd);
+  delay(1);
+  unsigned char len = SPI.transfer(0xFF);
   debugMsgInt("Length: ", len);
+  while (len > 0) {
+    delay(1);
+    Serial.print((char)SPI.transfer(0xFF));
+    len--;
+  }
+  Serial.println();
 }
 
 void loop()
@@ -94,7 +103,7 @@ void loop()
     return;
   }
 
-  int cmd = readVarint(&client);
+  unsigned char cmd = readVarint(&client);
   int len = readVarint(&client);
 
   debugMsgInt("Command: ", cmd);
@@ -123,18 +132,22 @@ void loop()
 
   // Wait a short bit and receive response
   delay(10);
-  SPI.transfer(0xFF);
   cmd = SPI.transfer(0xFF);
-  len = SPI.transfer(0xFF);
-
+  while (cmd == 0xff) {
+     cmd = SPI.transfer(0xFF);
+  }
   debugMsgInt("Rcv Command: ", cmd);
-  debugMsgInt("Length: ", len);
+  
   delay(1);
+  unsigned char inLen = SPI.transfer(0xFF);
+  debugMsgInt("Length: ", inLen);
+  
   String response;
-  for (int i = 0; i < len; i++)
-  {
-    char c = SPI.transfer(0xFF);
+  while (inLen > 0) {
+    delay(1);
+    char c = SPI.transfer(0xFF);    
     response += c;
+    inLen--;
   }
   debugMsgStr("Rcv Command data: ", response);
 
@@ -221,6 +234,6 @@ void debugMsgStr(const char *msg, String data)
 {
   if (DEBUG)
   {
-    Serial.print(msg + data);
+    Serial.println(msg + data);
   }
 }
