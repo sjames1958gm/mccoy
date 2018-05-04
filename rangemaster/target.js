@@ -10,6 +10,11 @@ const CMDFILE = 3;
 const HITLOG = 4;
 const DEBUGLOG = 5;
 
+const OFFLINE = 'offline';
+const CONNECTED = 'connected';
+const ONLINE = 'online';
+const RUNNING = 'running';
+
 let connections = {};
 
 startClient = function(addr, port, cb, datacb) {
@@ -29,84 +34,91 @@ startClient = function(addr, port, cb, datacb) {
         console.log(`xerror: ${addr}`);
         // if (cb) cb('target is unavailable');
       },
-      onMessage: (h, message) => {
-        if (datacb) datacb(h, message);
+      onMessage: (h, cmd, message) => {
+        // console.log(`onMessage: ${cmd} / ${message.length}`);
+        if (datacb) datacb(h, cmd, message);
       }
     }
   );
 };
 
-function start(target) {
-  startClient(
-    target.ip,
-    target.port,
-    (err, handle) => {
-      if (err) {
-        console.log(err);
-        target.online = false;
-        target.eventcb(target, 'connectionerror');
-        target.handle = 0;
-        console.log(`Target: ${target.id} offline`);
-      } else {
-        target.handle = handle;
-        target.online = true;
-        console.log(`Target: ${target.id} online`);
-        target.eventcb(target, 'connected');
-        resetTarget(target);
-        setTimeout(() => pingTarget(target), 2000);
-      }
-    },
-    (handle, message) => {
-      console.log(message);
-    }
-  );
-}
-
-function Target(targetDir, eventcb) {
+function Target(targetDir) {
   console.log(targetDir);
   let configPath = path.join(targetDir, 'config.env');
   if (fs.existsSync(configPath)) {
     let config = dotenv.parse(fs.readFileSync(configPath));
-    let target = {
-      targetPath: path.resolve(targetDir),
-      id: config.TARGETID,
-      ip: config.TARGETIP,
-      port: config.TARGETPORT,
-      online: false,
-      eventcb
-    };
+    this.targetPath = path.resolve(targetDir);
+    this.id = config.TARGETID;
+    this.ip = config.TARGETIP;
+    this.port = config.TARGETPORT;
+    this.connected = false;
+    this.state = OFFLINE;
+    this.handlePing = handlePing;
+    this.start = start;
+    this.ping = ping;
+    this.reset = reset;
     setTimeout(() => {
-      eventcb(target, 'created'), start(target);
+      this.start();
     }, 0);
-    return target;
   } else {
     console.log(`Could not read configuration at ${configPath}`);
   }
 }
 
-function pingTarget(target) {
-  if (target.online) {
-    if (target.handle == 0) {
-      console.log('??');
-      return;
+function start() {
+  startClient(
+    this.ip,
+    this.port,
+    (err, handle) => {
+      if (err) {
+        console.log(err);
+        this.connected = false;
+        this.state = OFFLINE;
+        // this.eventcb(target, 'connectionerror');
+        this.handle = 0;
+        console.log(`Target: ${this.id} offline`);
+        setTimeout(() => this.start(), 10000);
+      } else {
+        this.handle = handle;
+        this.connected = true;
+        this.state = CONNECTED;
+        console.log(`Target: ${this.id} online`);
+        this.reset();
+        setTimeout(() => this.ping(), 2000);
+      }
+    },
+    (handle, cmd, message) => {
+      switch (cmd) {
+        case PING:
+          this.handlePing(message);
+          break;
+        default:
+          console.log(`unknown command: ${cmd}`);
+      }
     }
-    console.log(`Sending ping to ${target.id}`);
-    targetif.send(target.handle, PING, 'Ping');
-    setTimeout(() => pingTarget(target), 2000);
+  );
+}
+
+function ping() {
+  if (this.connected) {
+    console.log(`Sending ping to ${this.id}`);
+    targetif.send(this.handle, PING, 'Ping');
+    setTimeout(() => this.ping(), 5000);
   } else {
     console.log('restart target');
-    start(target);
+    this.start();
   }
 }
 
-function resetTarget(target) {
-  if (target.online) {
-    if (target.handle == 0) {
-      console.log('??');
-      return;
-    }
+function handlePing() {
+  console.log(`Ping received from ${this.id}`);
+  this.state = ONLINE;
+}
+
+function reset() {
+  if (this.connected) {
     // targetif.send(target.handle, RESET, '');
   }
 }
 
-module.exports = Target;
+module.exports = path => new Target(path);

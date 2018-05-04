@@ -87,21 +87,31 @@ function targetjs() {
       let readBuffer = Buffer.from([]);
       let sizeLen = 0;
       let readSize = true;
+      let readCommand = true;
+      let command;
       socket.on('data', function(buffer) {
         try {
-          if (readSize == true) {
+          if (readCommand) {
+            command = buffer[0];
+            buffer = buffer.slice(1);
+            readCommand = false;
+          }
+          if (buffer.length > 0 && readSize) {
             let obj = readVarint(buffer, size, sizeLen);
             readSize = obj.more;
             size = obj.value;
             sizeLen = obj.len;
             buffer = obj.buffer;
           }
-          if (!readSize && buffer.size() > 0) {
-            readBuffer.append(buffer);
-            if (readBuffer.size() > readSize) console.log('oops');
-            if (readBuffer.size() >= readSize) {
-              if (handle.cbs.onMessage)
-                handle.cbs.onMessage(handle, readBuffer);
+          if (!readSize) {
+            // Allow zero size messages
+            readBuffer = Buffer.concat([readBuffer, buffer]);
+            if (readBuffer.length > size) console.log('oops');
+            if (readBuffer.length >= size) {
+              if (handle.cbs.onMessage) {
+                handle.cbs.onMessage(handle, command, readBuffer);
+              }
+              readCommand = true;
               readSize = true;
               size = 0;
               sizeLen = 0;
@@ -137,10 +147,11 @@ function targetjs() {
   function readVarint(buffer, value = 0, len = 0) {
     let more = true;
     let ndx = 0;
-    while (ndx < buffer.length) {
+    while (ndx < buffer.length && more) {
       let c = buffer[ndx++];
-      len++;
       value = ((c & 0x7f) << (len * 7)) + value;
+      len++;
+      more = c > 127;
     }
     return { more, value, buffer: buffer.slice(ndx), len };
   }
