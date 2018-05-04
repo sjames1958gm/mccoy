@@ -9,25 +9,25 @@
 #define SENDDATA 7
 #define WAIT 8
 
-#define STATUS_OK 1
-#define STATUS_READY 2
-#define STATUS_RUNNING 3
-#define STATUS_DONE 4
+#define STATUS_IDLE 1
+#define STATUS_RUNNING 2
 
 #define DEBUG 1
 
-char buff[1024];
+char buff[150];
+volatile char status;
 volatile int index;
-volatile int state;
-volatile int command;
-int sendCommand;
-int length;
-int lengthNdx;
-int status;
+volatile char state;
+volatile unsigned char command;
+volatile unsigned char sendCommand;
+volatile int length;
+volatile int lengthNdx;
 
-char *outMsg;
-int outLength;
-String pingRsp = "pong";
+volatile char *outMsg;
+volatile int outLength;
+String idleResp = "idle";
+String runResp = "run";
+String initResponse = "Ready";
 
 int counter = 0;
 
@@ -36,6 +36,7 @@ int counter = 0;
 #define HITLOG 4
 #define DBGLOG 5
 #define STATUS 6
+#define MSG 7
 #define ACK 0x7F
 
 #define LED 13
@@ -54,14 +55,19 @@ void setup(void)
 
   SPI.attachInterrupt(); /* Attach SPI interrupt */
   Serial.println("setup complete");
+
+  status = STATUS_IDLE;
 }
 
 void loop(void)
 {
   if (state == RCVCOMP) /* Check and print received buffer if any */
   {
+    outLength = initResponse.length();
+    outMsg = initResponse.c_str();
+    sendCommand = ACK;  
     state = SENDCMD;
-
+    
     buff[index] = 0;
     debugMsgInt("Command: ", command);
     debugMsgInt("Length: ", length);
@@ -71,9 +77,10 @@ void loop(void)
       Serial.println(buff);
     }
 
-    if (command == PING)
+    if (command == MSG)
     {
       digitalWrite(LED, (counter++ % 2) == 0 ? HIGH : LOW);
+
     }
   }
   delay(1);
@@ -90,8 +97,12 @@ ISR(SPI_STC_vect)
   case RCVCMD:
     command = c;
     // Out of sync if command = 0xff
-    if (command == 0xff)
-      break;
+    if (command == 0xff) {
+      // Send NULL in response
+      SPDR = 0;
+      break; 
+    }
+      
     state = RCVLEN;
     break;
   case RCVLEN:
@@ -103,8 +114,7 @@ ISR(SPI_STC_vect)
       }
       else
       {
-        state = RCVCOMP;
-        handleCommandISR();
+        state = handleCommandISR();
       }
     }
     break;
@@ -114,16 +124,20 @@ ISR(SPI_STC_vect)
       buff[index++] = c;
       if (index == length)
       {
-        state = RCVCOMP;
+        state = handleCommandISR();
       }
     }
+    break;
+    // If in receive complete state - send 0xFF - main loop hasn't processed last message
+  case RCVCOMP:
+    SPDR = 0xFF;
     break;
   case SENDCMD:
     SPDR = sendCommand;
     state = SENDLEN;
     break;
   case SENDLEN:
-    SPDR = outLength;
+    SPDR = (unsigned char)outLength;
     if (outLength > 0)
     {
       state = SENDDATA;
@@ -142,7 +156,7 @@ ISR(SPI_STC_vect)
     }
     break;
   case WAIT:
-    // Ignore recv data as it was to trigger SENDLEN
+    // Ignore recv data as it was to trigger last SEND
     resetState();
     break;
   default:
@@ -151,20 +165,23 @@ ISR(SPI_STC_vect)
   SREG = oldsrg;
 }
 
-void handleCommandISR()
+int handleCommandISR()
 {
   switch (command)
   {
   case PING:
     sendCommand = PING;
-    outLength = pingRsp.length();
-    outMsg = pingRsp.c_str();
-    state = SENDCMD;
+    outMsg = &status;
+    outLength = 1;
+    SPDR = 0xFF;
+    return SENDCMD;
     break;
   default:
+    SPDR = 0xFF;
     // Let loop() handle
     break;
   }
+  return RCVCOMP;
 }
 
 bool receiveLength(unsigned char c, int *length, int *lengthNdx)

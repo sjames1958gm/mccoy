@@ -2,6 +2,7 @@ const fs = require('fs');
 const path = require('path');
 const express = require('express');
 const morgan = require('morgan');
+const cors = require('cors');
 const bodyParser = require('body-parser');
 
 const Target = require('./target');
@@ -20,9 +21,8 @@ fs.readdir(rootDir, (err, files) => {
     if (/^target/.test(file)) {
       console.log(file);
       let targetPath = path.join(rootDir, file);
-      let target = Target(targetPath, targetEvent);
+      let target = Target(targetPath);
       if (target) {
-        console.log(target);
         targets.push(target);
       } else {
         console.log(`Target config failed for ${targetPath}`);
@@ -42,7 +42,40 @@ const app = express();
 let port = process.env.PORT || 8080;
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: false }));
-app.use(morgan('tiny'));
+app.use(morgan('combined'));
+app.use(cors('*'));
+
+app.get('/targets', (req, res) => {
+  res.json(targets.map(target => ({ id: target.id, state: target.state })));
+});
+
+app.get('/target/:id', (res, req) => {
+  console.log(res.params.id);
+  let id = res.params.id;
+  let json = {};
+  targets.some(t => {
+    if (t.id == id) {
+      json = { id: t.id, state: t.state, ip: t.ip, port: t.port };
+      return true;
+    }
+    return false;
+  });
+  req.json(json);
+});
+
+app.post('/target/reset/:id', (res, req) => {
+  console.log(res.params.id);
+  let id = res.params.id;
+  let json = {};
+  targets.some(t => {
+    if (t.id == id) {
+      t.reset();
+      return true;
+    }
+    return false;
+  });
+  req.json(json);
+});
 
 app.use(function(req, res) {
   res.sendStatus(404);
