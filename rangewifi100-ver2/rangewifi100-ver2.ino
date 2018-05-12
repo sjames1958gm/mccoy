@@ -1,4 +1,9 @@
+// 
+// May 12 2018 version. TCP connections to host, SPI connection to UNO
+//
+
 #include <ESP8266WiFi.h>
+
 #include <SPI.h>
 
 #define DEBUG 1
