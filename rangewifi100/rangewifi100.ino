@@ -8,14 +8,16 @@
 #define MSG 7
 #define ACK 0x7f
 
-IPAddress ip(192, 168, 1, 100);
-IPAddress gateway(192, 168, 1, 254);
+IPAddress ip(192, 168, 2, 100);
+IPAddress gateway(192, 168, 2, 254);
 IPAddress netmask(255, 255, 255, 0);
 
 #define nop asm volatile("nop\n\t")
 
-const char *ssid = "ATTVMb9amS";
-const char *password = "xmcpmjhvr7u7";
+const char* ssid = "ML-guest";
+const char* password = "mlguest538!";
+//const char *ssid = "ATTVMb9amS";
+//const char *password = "xmcpmjhvr7u7";
 
 int ledPin = LED_BUILTIN;
 int resetPin = D1;
