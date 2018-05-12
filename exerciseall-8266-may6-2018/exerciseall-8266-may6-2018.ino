@@ -19,13 +19,17 @@
 #define STATUS_RUNNING 2
 
 #define DEBUG 1
+// Set to 1 to indeicate no H/W is available
+#define NOHW 1
 
-unsigned char buff[150];
+char sendBuffer[256];
+unsigned char rcvBuffer[150];
 volatile char status;
 volatile int index;
 volatile char state;
 volatile unsigned char command;
 volatile unsigned char sendCommand;
+volatile unsigned char lastCommand;
 volatile int length;
 volatile int lengthNdx;
 
@@ -35,17 +39,16 @@ volatile int outLength;
 String idleResp = "idle";
 String runResp = "run";
 String initResponse = "Ready";
+volatile int pollCount = 0;
 
 int counter = 0;
 
 #define PINGCMD 2
 #define POLL 3
-#define ZVIBES 20
-#define CMDFILE 3
-#define HITLOG 4
-#define DBGLOG 5
-#define STATUS 6
 #define MSG 7
+#define ZVIBES 30
+#define RUNCMD 20
+#define GETHITDATA 21
 #define ACK 0x7F
 
 
@@ -66,7 +69,6 @@ int maxdowntime = 475;
 int targetholdtime = 1000;
 int hitdiff = 50;
 char pgmname[] = "exerciseall-ver2";
-char wifiwork1[256];
 int i, j, loopcount, deploycount, deploy, hitcount, hit, dir, olddir, lowerlimit, upperlimit, goingup, goingdown, movecycles, moveerror, itemnumber, tm, tmh, jobnumber, prtctl;
 unsigned long lowermicros, uppermicros,startmicros, startmillis, stopmicros, runtime,testmillis, starttest, prevhittime;
 unsigned long hittime, hitinterval, startuptime, startdowntime, curdowntime, curuptime, targetholdstart, vibereadstart, vibereadend, vibereadtime;
@@ -166,6 +168,7 @@ void getjob(){
   getjobtop:
  Serial.println("GETJOB():  enter the item number to run");
  Serial.println("ITEM    function   Discreption");
+ Serial.println("0,  getLocalStatus() get local status");
  Serial.println("1.  getmasterdata()  change values of constants");
  Serial.println("2.  restvibes()   establish rest values of accelarometers");
  Serial.println("3.  testvibes()   gather 3 axis data for user specified time");
@@ -188,6 +191,9 @@ void getjob(){
     if(Serial.read() != '\n'){Serial.println("going to "+String(jobnumber));}
   } 
   switch (jobnumber) {
+    case 0:
+      getLocalStatus();
+      break;
     case 1:
     getmasterdata(); 
     break;
@@ -247,6 +253,13 @@ void lightsout(){
   digitalWrite(redRelay, LOW);digitalWrite(yellowRelay, LOW);digitalWrite(greenRelay, LOW);
 } // end of lights out
 
+void getLocalStatus() {
+  Serial.println("========== Local Status ===========");
+  if (sendOnSpi) Serial.println("Send on SPI is true?");
+  Serial.println(String("Status is ") + String((int)status));
+  Serial.println(String("Poll Count is ") + String(pollCount));
+  Serial.println("========== Local Status ===========");
+}
 
 void setup() {
   Serial.begin(9600);
@@ -667,6 +680,7 @@ void vibereport(){
 } // end vibereport()
 
 void zvibes(){
+  // Commands now come across serial from 8266
 // / Serial.println("IN zvibes() ENTER: milliseconds to test");
 //  while (!Serial.available()){ ;}
 //  delay(50);
@@ -682,22 +696,30 @@ Serial.println("test length in millis:  "+String(testmillis));
   prevhittime = starttest;
   Serial.print("(zval minus rest zval)");
   Serial.println("START time zvibes() = "+String(prevhittime));
+  bool anyHits = false;
   while(millis() - starttest < testmillis){
+    if (NOHW) break;
       zval = analogRead(analogPinz);
       zpintime = millis();
       hit = 0;
       if(zval > zposthreshold || zval < znegthreshold) {hit = 1; Serial.print("z");}
       if(zval > (zposthreshold + 50) || zval < (znegthreshold - 50)) {hit = 1; Serial.print("Z");}
       if(hit == 1){
+        anyHits = true;
         hittime = zpintime;
         hitinterval = hittime - prevhittime;
         prevhittime = hittime;
         hit = 0;
         String temp = String(zval - zrest)+", "+String(hitinterval)+"/n";
         Serial.println(temp);
-        temp.toCharArray(wifiwork1,256);
-        sendToPeer(wifiwork1, temp.length());
+        temp.toCharArray(sendBuffer, 256);
+        sendToPeer(ZVIBES, sendBuffer, temp.length());
       }
+   }
+   if (!anyHits) {
+    String none = "No hits";
+    none.toCharArray(sendBuffer, 256);
+    sendToPeer(ZVIBES, sendBuffer, none.length());
    }
   digitalWrite(redRelay, LOW);
   Serial.println("DONE zvibes().");
@@ -953,9 +975,9 @@ ISR(SPI_STC_vect)
     }
     break;
   case RCVDATA:
-    if (index < sizeof(buff) - 1)
+    if (index < sizeof(rcvBuffer) - 1)
     {
-      buff[index++] = c;
+      rcvBuffer[index++] = c;
       if (index == length)
       {
         state = handleCommandISR();
@@ -969,6 +991,7 @@ ISR(SPI_STC_vect)
   case SENDCMD:
     SPDR = sendCommand;
     state = SENDLEN;
+    lastCommand = sendCommand;
     break;
   case SENDLEN:
     SPDR = (unsigned char)outLength;
@@ -979,7 +1002,9 @@ ISR(SPI_STC_vect)
     else
     {
       state = WAIT;
-      sendOnSpi = false;
+      if (lastCommand != POLL) {
+        sendOnSpi = false;
+      }
     }
     break;
   case SENDDATA:
@@ -987,7 +1012,9 @@ ISR(SPI_STC_vect)
     outLength--;
     if (outLength == 0)
     {
-      sendOnSpi = false;
+      if (lastCommand != POLL) {
+        sendOnSpi = false;
+      }
       state = WAIT;
     }
     break;
@@ -1014,20 +1041,19 @@ int handleCommandISR()
     break;
   case POLL:
     if (!sendOnSpi) {
+      pollCount++;
+      // Send POLL response if not sending some other command
       sendCommand = POLL;
       outMsg = &status;
-      outLength = 0;
+      outLength = 1;
       SPDR = 0xFF;
     }
     return SENDCMD;
-    break;    
-  case ZVIBES:
-    break;    
   default:
-    SPDR = 0xFF;
     // Let loop() handle
     break;
   }
+  SPDR = 0xFF;
   return RCVCOMP;
 }
 
@@ -1048,49 +1074,56 @@ void resetState()
 }
 
 void handleSpi() {
-  if (state == RCVCOMP) /* Check and print received buffer if any */
+  // State RCVCOMP means a command was received - process it
+  if (state == RCVCOMP)
   {
-    outLength = 0;
-//    outMsg = "";
-    sendCommand = ZVIBES;  
-    state = SENDCMD;
-    
-    buff[index] = 0;
+    unsigned char locCommand = command;
+        
+    rcvBuffer[index] = 0;
     
     debugMsgInt("Command: ", command);
     debugMsgInt("Length: ", length);
 
     if (length > 0)
     {
-      if (command == ZVIBES) {
+      if (locCommand == ZVIBES) {
         testmillis = 0;
         for (int i = 0; i < length; i++) {
-          testmillis = testmillis | (buff[i] << (8 * i));
+          testmillis = testmillis | (rcvBuffer[i] << (8 * i));
         }
       }
       else {
-        Serial.println((char*)buff);
+        Serial.println((char*)rcvBuffer);
       }
     }
 
-    if (command == ZVIBES)
-    {
-      Serial.println("Z vibes command received");
-      zvibes();
+    outLength = 0;
+    sendCommand = POLL;  
+    state = SENDCMD;
+
+    switch (locCommand) {
+      case RUNCMD:
+        Serial.println("Run command received");
+        status = STATUS_RUNNING;
+      break;
+      case GETHITDATA:
+        Serial.println("Get hit data command received");
+      break;
     }
   }
   delay(1);
 
 }
 
-void sendToPeer(char* buffer, int len) {
+void sendToPeer(unsigned char cmd, char* buffer, int len) {
   if (!sendOnSpi) {
     buffer[len] = 0;
     Serial.println(String("Send to peer: ") + buffer);
-    sendCommand = ZVIBES;
+    sendCommand = cmd;
     outMsg = buffer;
     outLength = len;
     sendOnSpi = true;
+    state = SENDCMD;
   }
 }
 
