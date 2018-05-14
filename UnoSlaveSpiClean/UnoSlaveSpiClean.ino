@@ -40,7 +40,7 @@ volatile int spi_pollCount = 0;
 bool sendOnSpi = false;
 
 #define PINGCMD 2
-#define POLL 3
+#define POLLCMD 3
 #define MSG 7
 #define RUNCMD 20
 #define GETHITDATA 21
@@ -82,7 +82,8 @@ void getJobMenu() {
   Serial.println("GETJOB():  enter the item number to run");
   Serial.println("ITEM    function   Description");
   Serial.println("0, refresh menu");
-  Serial.println("1,  getLocalStatus() get local status");
+  Serial.println("1, get local status");
+  Serial.println("2, mark end of exercise");
   Serial.println("99. getjob() EXIT");
 }
 
@@ -109,12 +110,14 @@ void getjob(){
     case 1:
       getLocalStatus();
     break;
+    case 2:
+      if (status == STATUS_RUNNING) status = STATUS_RUN_COMPLETE;
     case 99:
       done = true;
     break;
     } // end of switch
-    Serial.println("DONE in getjob().");
   }
+  Serial.println("DONE in getjob().");
 } // end getjob()
 
 void getLocalStatus() {
@@ -167,7 +170,7 @@ void monitorSpi() {
 
     // Simply reply with POLL message ? 
     spi_sendLength = 0;
-    spi_sendCommand = POLL;  
+    spi_sendCommand = POLLCMD;  
     spi_state = SPI_STATE_SENDCMD;
 
     switch (locCommand) {
@@ -273,7 +276,7 @@ ISR(SPI_STC_vect)
     else
     {
       spi_state = SPI_STATE_WAIT;
-      if (spi_lastSentCommand != POLL) {
+      if (spi_lastSentCommand != POLLCMD) {
         sendOnSpi = false;
       }
     }
@@ -283,7 +286,7 @@ ISR(SPI_STC_vect)
     spi_sendLength--;
     if (spi_sendLength == 0)
     {
-      if (spi_lastSentCommand != POLL) {
+      if (spi_lastSentCommand != POLLCMD) {
         sendOnSpi = false;
       }
       spi_state = SPI_STATE_WAIT;
@@ -306,30 +309,29 @@ ISR(SPI_STC_vect)
 //
 int handleCommandISR()
 {
+  // This function is called when the received command is complete
+  SPDR = 0xFF;
   switch (spi_rcvCommand)
   {
   case PINGCMD:
+    // Respond PING with PING
     spi_sendCommand = PINGCMD;
     spi_sendMsg = &status;
     spi_sendLength = 1;
-    SPDR = 0xFF;
     return SPI_STATE_SENDCMD;
-    break;
-  case POLL:
+  case POLLCMD:
     if (!sendOnSpi) {
       spi_pollCount++;
       // Send POLL response if not sending some other command
-      spi_sendCommand = POLL;
+      spi_sendCommand = POLLCMD;
       spi_sendMsg = &status;
       spi_sendLength = 1;
-      SPDR = 0xFF;
     }
     return SPI_STATE_SENDCMD;
   default:
-    // Let application code handle by keeping state at RCVCOMP
+    // Let application code handle by transitioning to RCVCOMP
     break;
   }
-  SPDR = 0xFF;
   return SPI_STATE_RCVCOMP;
 }
 
