@@ -6,48 +6,48 @@
 
 #include <SPI.h>
 
+// Enables debug print outs
 #define DEBUG 1
 
-#define RESETCMD 1
-#define PINGCMD 2
-#define POLLCMD 3
-#define MSG 7
-#define RUNCMD 20
-#define GETHITDATA 21
-#define ACK 0x7f
-#define resetDelay 4000
+// Configure IP/Gateway - fixed IP .100
+// WiFi SSID / password
 
 //IPAddress ip(192, 168, 2, 100);
 //IPAddress gateway(192, 168, 2, 254);
 IPAddress ip(192, 168, 1, 100);
 IPAddress gateway(192, 168, 1, 254);
 IPAddress netmask(255, 255, 255, 0);
-
-#define nop asm volatile("nop\n\t")
-
 //const char* ssid = "ML-guest";
 //const char* password = "mlguest538!";
 const char *ssid = "ATTVMb9amS";
 const char *password = "xmcpmjhvr7u7";
 
-int ledPin = LED_BUILTIN;
+// Commands between MCU and Arduino
+#define RESETCMD 1
+#define PINGCMD 2
+#define POLLCMD 3
+#define MSG 7
+#define RUNCMD 20
+#define GETHITDATA 21
+#define ACK 0x40
+
+// Delay after resetting Arduino
+#define resetDelay 4000
+
 int resetPin = D1;
 int serialPollRate = 100;
 int serialPollLast = millis();
 WiFiServer server(9000);
 WiFiClient client;
 unsigned char slaveState = 0;
+int pollCount = 0;
 
 void setup()
 {
   Serial.begin(115200);
   delay(10);
-
-  pinMode(ledPin, OUTPUT);
-  digitalWrite(ledPin, HIGH);
-
+  
   SPI.begin();
-
 
   resetSlave();
 
@@ -105,19 +105,21 @@ void setup()
   Serial.println();
 }
 
-void getjobMenu() {
+void getJobMenu() {
  Serial.println("GETJOB():  enter the item number to run");
  Serial.println("ITEM    function   Description");
  Serial.println("0. display menu");
- Serial.println("1. run exercise");
- Serial.println("2. get hit data");
- Serial.println("3. reset slave");
- Serial.println("99. getjob() EXIT");
+ Serial.println("1. get local status");
+ Serial.println("2. run exercise");
+ Serial.println("3. get hit data");
+ Serial.println("4. reset slave");
+ Serial.println("99. EXIT");
 }
 
-void getjob(){
-  int jobnumber;
-  getjobMenu();
+// Get action to perform - if no action just monitor interfaces
+void getJob(){
+  int jobNumber;
+  getJobMenu();
   bool done = false;
   while (!done) {
     while (!Serial.available()){
@@ -128,21 +130,24 @@ void getjob(){
     delay(50);
     while(Serial.available())
     {
-      jobnumber = Serial.parseInt();
-      if (Serial.read() != '\n') { Serial.println("going to "+String(jobnumber)); }
+      jobNumber = Serial.parseInt();
+      if (Serial.read() != '\n') { Serial.println("going to "+String(jobNumber)); }
     } 
   
-    switch (jobnumber) {
+    switch (jobNumber) {
       case 0:
-        getjobMenu();
+        getJobMenu();
         break;
       case 1:
-        sendRunCommand(); 
-      break;
-      case 2:
-        getHitData(); 
+        getLocalStatus();
         break;
+      case 2:
+        sendCommandWithoutData(RUNCMD, "run"); 
+      break;
       case 3:
+        sendCommandWithoutData(GETHITDATA, "get hit data");
+        break;
+      case 4:
         resetSlave();
         break;
       case 99:
@@ -150,18 +155,23 @@ void getjob(){
         break;
     } // end of switch
   }
-  Serial.println("DONE in getjob().");
-} // end getjob()
+  Serial.println("DONE in getJob().");
+}
 
 void loop()
 {
-  getjob();
+  getJob();
 }
 
-void sendRunCommand() {
+void getLocalStatus() {
+  Serial.println("===================================================");
+  Serial.println(String("Poll count is ") + String(pollCount));
+}
+
+void sendCommandWithoutData(unsigned char cmd, String cmdName) {
   
-  SPI.transfer((char)RUNCMD);
-  debugMsgInt("sending command: ", RUNCMD, true);
+  SPI.transfer((char)cmd);
+  debugMsgStr("sending command: ", cmdName, true);
 
   // No length
   SPI.transfer((char)0);
@@ -174,43 +184,6 @@ void sendRunCommand() {
   Serial.println(response);
 }
 
-void getHitData() {
-  
-}
-
-//void zvibes(){
-//  unsigned int testmillis;
-//  Serial.println("IN zvibes() ENTER: milliseconds to test");
-//  while (!Serial.available()){ 
-//    handleWifi();
-//  }
-//  delay(50);
-//  while(Serial.available())
-//  {
-//    testmillis = Serial.parseInt();
-//    if(Serial.read() != '\n'){Serial.println("Entered testmillis = "+String(testmillis));}
-//  }
-//  
-//  SPI.transfer((char)ZVIBES);
-//  debugMsgInt("sending command: ", ZVIBES, true);
-//  debugMsgInt("milliseconds: ", testmillis, true);
-//  
-//  SPI.transfer((char)4);
-//  for (int i = 0; i < 4; i++) {
-//    SPI.transfer((char)(testmillis & 0xFF));
-//    testmillis  = testmillis >> 8;
-//  }
-//
-//  delay(100);
-//
-//  // Wait for response - it will likely not be ZVIBES, but POLL
-//  unsigned char recvCommand;
-//  String response = recvSerial(&recvCommand);
-//  debugMsgInt("Command rcv: ", (int)recvCommand, true);
-//  Serial.println(response);
-//  
-//}
-
 void handleWifi() {
   // Check if a client has connected
   if (!client.connected())
@@ -218,18 +191,18 @@ void handleWifi() {
     client = server.available();
     if (!client)
     {
-      delay(10);
       return;
     }
     Serial.println("new client");
   }
 
-  // Wait until the client sends some data
+  // Return if no data is available
   if (!client.available())
   {
     return;
   }
 
+  // Read command and length
   unsigned char cmd = readVarint(&client);
   int len = readVarint(&client);
 
@@ -248,22 +221,24 @@ void handleWifi() {
   }
   else
   {
-    SPI.transfer((char)cmd);
-    // TODO: this needs to be send var int
-    SPI.transfer((char)request.length());
-    for (int i = 0; i < request.length(); i++)
-    {
-      SPI.transfer(request[i]);
-    }
-
-    // Wait a short bit and receive response
-    delay(10);
-    
-    unsigned char rcvCmd;
-    String response = recvSerial(&rcvCmd);
-    debugMsgStr("Rcv Command data: ", response, true);
-  
-    handleSerialMessage(&client, rcvCmd, response);
+    // Change this Don't send directly to Arduino
+    return;
+//    SPI.transfer((char)cmd);
+//    // TODO: this needs to be send var int
+//    SPI.transfer((char)request.length());
+//    for (int i = 0; i < request.length(); i++)
+//    {
+//      SPI.transfer(request[i]);
+//    }
+//
+//    // Wait a short bit and receive response
+//    delay(10);
+//    
+//    unsigned char rcvCmd;
+//    String response = recvSerial(&rcvCmd);
+//    debugMsgStr("Rcv Command data: ", response, true);
+//  
+//    handleSerialMessage(&client, rcvCmd, response);
   }
 }
 
@@ -279,9 +254,11 @@ void handleSerial() {
     unsigned char recvCommand;
     String recvData = recvSerial(&recvCommand);
     serialPollLast = millis();
+    
     switch (recvCommand) {
       case POLLCMD:
       {
+        pollCount++;
         unsigned char newState = recvData[0];
         if (newState != slaveState) {
           Serial.println(String("slave state change, new state ") + String((int)newState));
@@ -298,6 +275,7 @@ String recvSerial(unsigned char* cmd) {
   *cmd = SPI.transfer(0xFF);
   while (*cmd == 0xff) {
      *cmd = SPI.transfer(0xFF);
+     delay(1);
   }
   
   debugMsgInt("Rcv Command: ", (int)*cmd, *cmd > POLLCMD);
