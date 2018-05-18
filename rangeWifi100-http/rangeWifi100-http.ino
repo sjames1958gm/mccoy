@@ -46,7 +46,21 @@ void handleRoot() {
 }
 
 void handleStatus() {
-  server.send(200, "text/plain", String("Target status is ") + String(slaveState));
+  String resp = "{ \"status\": \"";
+  switch (slaveState) {
+    case 1:
+      resp += "ready\"}";
+      break; 
+    case 2:
+      resp += "running\"}";
+      break; 
+    case 3:
+      resp += "complete\"}";
+      break; 
+    default: 
+      resp += "unknown\"}";
+  }
+  server.send(200, "application/json", resp);
 }
 
 void handleNotFound() {
