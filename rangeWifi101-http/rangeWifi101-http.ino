@@ -8,12 +8,12 @@
 // Enables debug print outs
 #define DEBUG 1
 
-// Configure IP/Gateway - fixed IP .100
+// Configure IP/Gateway - fixed IP .101
 // WiFi SSID / password
 
-//IPAddress ip(192, 168, 2, 100);
+//IPAddress ip(192, 168, 2, 101);
 //IPAddress gateway(192, 168, 2, 254);
-IPAddress ip(192, 168, 1, 100);
+IPAddress ip(192, 168, 1, 101);
 IPAddress gateway(192, 168, 1, 254);
 IPAddress netmask(255, 255, 255, 0);
 //const char* ssid = "ML-guest";

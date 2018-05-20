@@ -8,18 +8,16 @@
 // Enables debug print outs
 #define DEBUG 1
 
-// Configure IP/Gateway - fixed IP .100
+// Configure IP/Gateway - fixed IP 192.168.2.100
 // WiFi SSID / password
 
-//IPAddress ip(192, 168, 2, 100);
-//IPAddress gateway(192, 168, 2, 254);
-IPAddress ip(192, 168, 1, 100);
-IPAddress gateway(192, 168, 1, 254);
+IPAddress ip(192, 168, 2, 100);
+IPAddress gateway(192, 168, 2, 254);
 IPAddress netmask(255, 255, 255, 0);
-//const char* ssid = "ML-guest";
-//const char* password = "mlguest538!";
-const char *ssid = "ATTVMb9amS";
-const char *password = "xmcpmjhvr7u7";
+const char* ssid = "ML-guest";
+const char* password = "mlguest538!";
+//const char *ssid = "ATTVMb9amS";
+//const char *password = "xmcpmjhvr7u7";
 
 // Commands between MCU and Arduino
 #define RESETCMD 1
