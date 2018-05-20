@@ -43,7 +43,7 @@ bool sendOnSpi = false;
 #define POLLCMD 3
 #define MSG 7
 #define RUNCMD 20
-#define GETHITDATA 21
+#define HITDATA 21
 #define ACK 0x7F
 //
 // ===========  End of SPI data =================
@@ -57,7 +57,8 @@ volatile char status;
 
 char pgmname[] = "unoSpiSlaveNoAppCode";
 int loopCount = 0;
-
+unsigned long runTimer = millis();
+String hitData;
 
 void setup() {
   Serial.begin(9600);
@@ -95,6 +96,7 @@ void getjob(){
   while (!done) {
     while (!Serial.available()){ 
       monitorSpi();
+      checkRunStatus();
     }
     delay(50);
     
@@ -126,6 +128,16 @@ void getLocalStatus() {
   Serial.println(String("Status is ") + String((int)status));
   Serial.println(String("Poll Count is ") + String(spi_pollCount));
   Serial.println("========== Local Status ===========");
+}
+
+void checkRunStatus() {
+  unsigned long now = millis();
+  if ((status == STATUS_RUNNING) && ((now - runTimer) > 10000)) {
+    status = STATUS_RUN_COMPLETE;
+    hitData = "Random hit data from Arduino";
+    sendToSpiPeer(HITDATA, hitData.c_str(), hitData.length());
+    Serial.println("Run Complete");
+  }
 }
 // ======================================================
 //
@@ -177,8 +189,9 @@ void monitorSpi() {
       case RUNCMD:
         Serial.println("Run command received");
         status = STATUS_RUNNING;
+        runTimer = millis();
       break;
-      case GETHITDATA:
+      case HITDATA:
         Serial.println("Get hit data command received");
       break;
     }
@@ -198,7 +211,7 @@ void sendToSpiPeer(unsigned char cmd, char* buffer, int len) {
     spi_sendMsg = buffer;
     spi_sendLength = len;
     sendOnSpi = true;
-    spi_state = SPI_STATE_SENDCMD;
+//    spi_state = SPI_STATE_SENDCMD;
   }
 }
 
