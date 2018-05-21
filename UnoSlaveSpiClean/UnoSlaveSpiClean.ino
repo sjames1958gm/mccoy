@@ -32,7 +32,10 @@ volatile unsigned char spi_sendCommand;
 volatile unsigned char spi_lastSentCommand;
 volatile char *spi_sendMsg;
 volatile int spi_sendLength;
-
+// These are set by application code to send a message
+volatile char* api_sendMsg;
+volatile int api_sendLength;
+volatile unsigned char api_sendCommand;
 // Status variable to debug whether we are getting polled
 volatile int spi_pollCount = 0;
 
@@ -127,12 +130,13 @@ void getLocalStatus() {
   if (sendOnSpi) Serial.println("Send on SPI is true?");
   Serial.println(String("Status is ") + String((int)status));
   Serial.println(String("Poll Count is ") + String(spi_pollCount));
+  Serial.println(String("Hit data is ") + hitData);
   Serial.println("========== Local Status ===========");
 }
 
 void checkRunStatus() {
   unsigned long now = millis();
-  if ((status == STATUS_RUNNING) && ((now - runTimer) > 10000)) {
+  if ((status == STATUS_RUNNING) && ((now - runTimer) > 5000)) {
     status = STATUS_RUN_COMPLETE;
     hitData = "Random hit data from Arduino";
     sendToSpiPeer(HITDATA, hitData.c_str(), hitData.length());
@@ -193,6 +197,7 @@ void monitorSpi() {
       break;
       case HITDATA:
         Serial.println("Get hit data command received");
+        sendToSpiPeer(HITDATA, hitData.c_str(), hitData.length());
       break;
     }
   }
@@ -205,13 +210,11 @@ void monitorSpi() {
 //
 void sendToSpiPeer(unsigned char cmd, char* buffer, int len) {
   if (!sendOnSpi) {
-    buffer[len] = 0;
     Serial.println(String("Send to peer: ") + buffer);
-    spi_sendCommand = cmd;
-    spi_sendMsg = buffer;
-    spi_sendLength = len;
+    api_sendMsg = buffer;
+    api_sendLength = len;
+    api_sendCommand = cmd;
     sendOnSpi = true;
-//    spi_state = SPI_STATE_SENDCMD;
   }
 }
 
@@ -274,7 +277,6 @@ ISR(SPI_STC_vect)
   case SPI_STATE_RCVCOMP:
     SPDR = 0xFF;
     break;
-    
   case SPI_STATE_SENDCMD:
     SPDR = spi_sendCommand;
     spi_state = SPI_STATE_SENDLEN;
@@ -327,18 +329,24 @@ int handleCommandISR()
   switch (spi_rcvCommand)
   {
   case PINGCMD:
-    // Respond PING with PING
-    spi_sendCommand = PINGCMD;
-    spi_sendMsg = &status;
-    spi_sendLength = 1;
-    return SPI_STATE_SENDCMD;
+//    // Respond PING with PING
+//    spi_sendCommand = PINGCMD;
+//    spi_sendMsg = &status;
+//    spi_sendLength = 1;
+//    return SPI_STATE_SENDCMD;
   case POLLCMD:
-    if (!sendOnSpi) {
+    if (api_sendCommand == 0) {
       spi_pollCount++;
       // Send POLL response if not sending some other command
       spi_sendCommand = POLLCMD;
       spi_sendMsg = &status;
       spi_sendLength = 1;
+    }
+    else {
+      spi_sendCommand = api_sendCommand;
+      api_sendMsg = api_sendMsg;
+      spi_sendLength = api_sendLength;
+      api_sendCommand = 0;
     }
     return SPI_STATE_SENDCMD;
   default:
