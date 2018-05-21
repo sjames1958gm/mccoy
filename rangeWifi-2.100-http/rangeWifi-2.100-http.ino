@@ -7,7 +7,7 @@
 
 // Enables debug print outs
 #define DEBUG 1
-#define DISABLE_RESET 1
+#define DISABLE_RESET 0
 
 // Configure IP/Gateway - fixed IP 192.168.2.100
 // WiFi SSID / password
@@ -328,7 +328,7 @@ void handleSerial() {
     
     SPI.transfer((char)0);
   
-    delay(100);
+    delay(2);
     unsigned char recvCommand;
     String recvData = recvSerial(&recvCommand);
     serialPollLast = millis();
@@ -367,6 +367,7 @@ String recvSerial(unsigned char* cmd) {
   
   debugMsgInt("Rcv Command: ", (int)*cmd, *cmd > POLLCMD);
   
+  delay(2);
   unsigned char len = SPI.transfer(0xFF);
   debugMsgInt("Length: ", len, *cmd > POLLCMD);
   

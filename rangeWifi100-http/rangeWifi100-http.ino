@@ -7,12 +7,11 @@
 
 // Enables debug print outs
 #define DEBUG 1
+#define DISABLE_RESET 0
 
-// Configure IP/Gateway - fixed IP .100
+// Configure IP/Gateway - fixed IP 192.168.1.100
 // WiFi SSID / password
 
-//IPAddress ip(192, 168, 2, 100);
-//IPAddress gateway(192, 168, 2, 254);
 IPAddress ip(192, 168, 1, 100);
 IPAddress gateway(192, 168, 1, 254);
 IPAddress netmask(255, 255, 255, 0);
@@ -240,6 +239,7 @@ void getLocalStatus() {
   Serial.println(String("Poll count is ") + String(pollCount));
   Serial.println(String("Peer status is ") + String(slaveState));
   Serial.println(String("Web count is ") + String(webCount));
+  Serial.println(String("Local hit data is ") + hitData);
   Serial.println("===================================================");
 }
 
@@ -257,6 +257,8 @@ void sendCommandWithoutData(unsigned char cmd, String cmdName) {
   String response = recvSerial(&recvCommand);
   debugMsgInt("Command rcv: ", (int)recvCommand, true);
   Serial.println(response);
+  
+  handleCommand(recvCommand, response);
 }
 
 /*
@@ -326,42 +328,46 @@ void handleSerial() {
     
     SPI.transfer((char)0);
   
-    delay(100);
+    delay(2);
     unsigned char recvCommand;
     String recvData = recvSerial(&recvCommand);
     serialPollLast = millis();
     
-    switch (recvCommand) {
-      case POLLCMD:
-      {
-        pollCount++;
-        unsigned char newState = recvData[0];
-        if (newState != slaveState) {
-          Serial.println(String("slave state change, new state ") + String((int)newState));
-          slaveState = newState;
-        }
-      }
-      break;
-      case HITDATA:
-      {
-        hitData = recvData;
-        Serial.println(String("Hit Data Received:") + recvData);
-      }
-      break;
-    }
+    handleCommand(recvCommand, recvData);
   }
 }
 
-String recvSerial(unsigned char* cmd) {
-  
+void handleCommand(unsigned char command, String& data) {
+    switch (command) {
+    case POLLCMD:
+    {
+      pollCount++;
+      unsigned char newState = data[0];
+      if (newState != slaveState) {
+        Serial.println(String("slave state change, new state ") + String((int)newState));
+        slaveState = newState;
+      }
+    }
+    break;
+    case HITDATA:
+    {
+      hitData = data;
+      Serial.println(String("Hit Data Received:") + data);
+    }
+    break;
+  }
+}
+
+String recvSerial(unsigned char* cmd) {  
   *cmd = SPI.transfer(0xFF);
   while (*cmd == 0xff) {
-     *cmd = SPI.transfer(0xFF);
      delay(2);
+     *cmd = SPI.transfer(0xFF);
   }
   
   debugMsgInt("Rcv Command: ", (int)*cmd, *cmd > POLLCMD);
   
+  delay(2);
   unsigned char len = SPI.transfer(0xFF);
   debugMsgInt("Length: ", len, *cmd > POLLCMD);
   
@@ -443,10 +449,12 @@ void writeFor(WiFiClient *client, String buffer)
 
 void resetSlave()
 {
-  pinMode(resetPin, OUTPUT);
-  digitalWrite(resetPin, LOW);
-  delay(500);
-  digitalWrite(resetPin, HIGH);
+  if (!DISABLE_RESET) {
+    pinMode(resetPin, OUTPUT);
+    digitalWrite(resetPin, LOW);
+    delay(500);
+    digitalWrite(resetPin, HIGH);
+  }
 }
 
 void debugMsgInt(const char *msg, int value, bool filter)
