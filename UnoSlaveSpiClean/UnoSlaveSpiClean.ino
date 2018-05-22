@@ -145,7 +145,8 @@ void checkRunStatus() {
   unsigned long now = millis();
   if ((status == STATUS_RUNNING) && ((now - runTimer) > 5000)) {
     status = STATUS_RUN_COMPLETE;
-    hitData = "Random hit data from Arduino";
+    hitData = "Random hit data from Arduino  ";
+    hitData += String(millis());
     sendToSpiPeer(HITDATA, hitData.c_str(), hitData.length());
     Serial.println("Run Complete");
   }
@@ -183,8 +184,8 @@ void monitorSpi() {
         
     spi_rcvBuffer[spi_rcvIndex] = 0;
     
-    debugMsgInt("Command: ", locCommand);
-    debugMsgInt("Length: ", spi_length);
+//    debugMsgInt("Command: ", locCommand);
+//    debugMsgInt("Length: ", spi_length);
 
     if (spi_length > 0)
     {
@@ -227,6 +228,8 @@ void monitorSpi() {
       case F7CMD:
         Serial.println("Function 7 command received");
       break;
+      default:
+        Serial.println(String("Unknown command: ") + String(locCommand));
     }
   }
   delay(1);
@@ -372,7 +375,7 @@ int handleCommandISR()
     }
     else {
       spi_sendCommand = api_sendCommand;
-      api_sendMsg = api_sendMsg;
+      spi_sendMsg = api_sendMsg;
       spi_sendLength = api_sendLength;
       api_sendCommand = 0;
     }
