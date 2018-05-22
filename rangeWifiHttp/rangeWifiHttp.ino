@@ -33,6 +33,13 @@ const char *password = "xmcpmjhvr7u7";
 #define MSG 7
 #define RUNCMD 20
 #define HITDATA 21
+#define F1CMD 22
+#define F2CMD 23
+#define F3CMD 24
+#define F4CMD 25
+#define F5CMD 26
+#define F6CMD 27
+#define F7CMD 28
 #define ACK 0x40
 
 // Wait this delay (msec) after resetting arduino
@@ -92,6 +99,43 @@ void handleStart() {
   server.send(200, "application/json", "{}");
   // Send RUN command to arduino
   sendCommandWithoutData(RUNCMD, "run");
+}
+
+// functionX route - http://<address>/functionX
+void handleFunction1() {
+  webCount++;
+  server.send(200, "application/json", "{}");
+  sendCommandWithoutData(F1CMD, "Function 1");
+}
+void handleFunction2() {
+  webCount++;
+  server.send(200, "application/json", "{}");
+  sendCommandWithoutData(F2CMD, "Function 2");
+}
+void handleFunction3() {
+  webCount++;
+  server.send(200, "application/json", "{}");
+  sendCommandWithoutData(F3CMD, "Function 3");
+}
+void handleFunction4() {
+  webCount++;
+  server.send(200, "application/json", "{}");
+  sendCommandWithoutData(F4CMD, "Function 4");
+}
+void handleFunction5() {
+  webCount++;
+  server.send(200, "application/json", "{}");
+  sendCommandWithoutData(F5CMD, "Function 5");
+}
+void handleFunction6() {
+  webCount++;
+  server.send(200, "application/json", "{}");
+  sendCommandWithoutData(F6CMD, "Function 6");
+}
+void handleFunction7() {
+  webCount++;
+  server.send(200, "application/json", "{}");
+  sendCommandWithoutData(F7CMD, "Function 7");
 }
 
 // Reset route - http://<address>/reset
@@ -173,6 +217,13 @@ void setup()
   server.on("/start", handleStart);
   server.on("/reset", handleReset);
   server.on("/hitData", handleGetHitData);
+  server.on("/function1", handleFunction1);
+  server.on("/function2", handleFunction2);
+  server.on("/function3", handleFunction3);
+  server.on("/function4", handleFunction4);
+  server.on("/function5", handleFunction5);
+  server.on("/function6", handleFunction6);
+  server.on("/function7", handleFunction7);
   
   server.onNotFound(handleNotFound);
   
