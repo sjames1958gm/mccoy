@@ -84,7 +84,7 @@ void handleStatus() {
     case RUNNING_STATE:
       resp += "running\"}";
       break; 
-    case 3=RUN_COMPLETE_STATE:
+    case RUN_COMPLETE_STATE:
       resp += "complete\"}";
       break; 
     default: 
