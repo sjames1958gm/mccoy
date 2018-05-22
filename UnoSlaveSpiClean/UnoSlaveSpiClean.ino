@@ -47,6 +47,13 @@ bool sendOnSpi = false;
 #define MSG 7
 #define RUNCMD 20
 #define HITDATA 21
+#define F1CMD 22
+#define F2CMD 23
+#define F3CMD 24
+#define F4CMD 25
+#define F5CMD 26
+#define F6CMD 27
+#define F7CMD 28
 #define ACK 0x7F
 //
 // ===========  End of SPI data =================
@@ -198,6 +205,27 @@ void monitorSpi() {
       case HITDATA:
         Serial.println("Get hit data command received");
         sendToSpiPeer(HITDATA, hitData.c_str(), hitData.length());
+      break;
+      case F1CMD:
+        Serial.println("Function 1 command received");
+      break;
+      case F2CMD:
+        Serial.println("Function 2 command received");
+      break;
+      case F3CMD:
+        Serial.println("Function 3 command received");
+      break;
+      case F4CMD:
+        Serial.println("Function 4 command received");
+      break;
+      case F5CMD:
+        Serial.println("Function 5 command received");
+      break;
+      case F6CMD:
+        Serial.println("Function 6 command received");
+      break;
+      case F7CMD:
+        Serial.println("Function 7 command received");
       break;
     }
   }
