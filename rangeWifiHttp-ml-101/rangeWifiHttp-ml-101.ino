@@ -13,10 +13,10 @@
 #define DISABLE_RESET 0
 
 //
-// Configure IP/Gateway - fixed IP 192.168.1.101
+// Configure IP/Gateway - fixed IP 192.168.2.101
 //
-IPAddress ip(192, 168, 1, 101);
-IPAddress gateway(192, 168, 1, 254);
+IPAddress ip(192, 168, 2, 101);
+IPAddress gateway(192, 168, 2, 254);
 IPAddress netmask(255, 255, 255, 0);
 //
 // WiFi SSID / password
