@@ -233,8 +233,8 @@ void setup()
   server.onNotFound(handleNotFound);
   
   // Send test string to arduino (put this is a function?)
-  String testString = "SPI Interface Initialized, IP address: \n";
-  testString += Wifi.localIP();
+  String testString = "SPI Interface Initialized, IP address: ";
+  testString += WiFi.localIP().toString();
   SPI.transfer((char)MSG);
   debugMsgInt("sending command: ", MSG, true);
   SPI.transfer((char)testString.length());
