@@ -160,12 +160,17 @@ void handleGetHitData() {
     server.send(200, "application/json", "{\"data\":\"\"}");
     }
   else {
-    String json = "{\"data\":\"";
+    String json = "{\"data\":[\"";
     for (int i = 0; i < hitData.length(); i++) {
-      if (hitData[i] > ' ') {
-        json += hitData[i];     }
+      if (hitData[i] == '\n') {
+        json += "\",\"";
+      }
+      if (hitData[i] >= ' ') {
+        json += hitData[i];     
+      }
     }
-    json += String("\"}");
+    json += String("\"]}");
+    Serial.println(json);
     server.send(200, "application/json", json);
   }
 }
@@ -420,7 +425,7 @@ void handleCommand(unsigned char command, String& data) {
     break;
     case HITDATA:
     {
-      hitData = data;
+      hitData += data + "\n";
       Serial.println(String("Hit Data Received:") + data);
     }
     break;
