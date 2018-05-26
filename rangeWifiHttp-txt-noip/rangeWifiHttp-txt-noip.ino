@@ -153,6 +153,7 @@ void handleReset() {
 
 // Get hit data route - http://<address>/hitData
 void handleGetHitData() {
+//  Serial.println(String("getHitData: ") + hitData);
   webCount++;
   if (hitData.length() == 0) {
     sendCommandWithoutData(HITDATA, "get hit data");
@@ -160,7 +161,11 @@ void handleGetHitData() {
     }
   else {
     String json = "{\"data\":\"";
-    json += hitData + String("\"}");
+    for (int i = 0; i < hitData.length(); i++) {
+      if (hitData[i] > ' ') {
+        json += hitData[i];     }
+    }
+    json += String("\"}");
     server.send(200, "application/json", json);
   }
 }
