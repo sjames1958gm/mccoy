@@ -10,15 +10,12 @@
 // Enables debug print outs
 #define DEBUG 1
 // Set to 1 to disable reset logic from NodeMCU (ESP8266 board)
-#define DISABLE_RESET 0
+#define DISABLE_RESET 1
 
-//
-// Configure IP/Gateway - fixed IP 192.168.2.101
-//
 // Commented out to allow WiFi to select address
 //IPAddress ip(192, 168, 0, 101);
-IPAddress gateway(192, 168, 0, 1);
-IPAddress netmask(255, 255, 255, 0);
+//IPAddress gateway(192, 168, 0, 1);
+//IPAddress netmask(255, 255, 255, 0);
 //
 // WiFi SSID / password
 ////
@@ -50,7 +47,7 @@ const char *password = "Shoot999";
 // This is the 
 int resetPin = D1;
 // Poll arduino only every serialPollRate msec
-int serialPollRate = 100;
+int serialPollRate = 400;
 int serialPollLast = millis();
 
 // State of the arduino
@@ -63,6 +60,7 @@ unsigned char slaveState = 0;
 // Status counters - used to debug connection status
 int pollCount = 0;
 int webStatusCount = 0;
+int webHitCount = 0;
 int webCount = 0;
 // Last value of hitData received.
 String hitData;
@@ -100,8 +98,10 @@ void handleStatus() {
 // Start (run) route - http://<address>/start
 void handleStart() {
   webCount++;
+  hitData = "";
   server.send(200, "application/json", "{}");
   // Send RUN command to arduino
+  Serial.println("Run command");
   sendCommandWithoutData(RUNCMD, "run");
 }
 
@@ -145,18 +145,20 @@ void handleFunction7() {
 // Reset route - http://<address>/reset
 void handleReset() {
   webCount++;
+  hitData = "";
   server.send(200, "application/json", "{}");
   // reset arduino device and clear current hitData
+  Serial.println("Reset command");
   resetSlave();
-  hitData = "";
 }
 
 // Get hit data route - http://<address>/hitData
 void handleGetHitData() {
 //  Serial.println(String("getHitData: ") + hitData);
-  webCount++;
+  webHitCount++;
   if (hitData.length() == 0) {
-    sendCommandWithoutData(HITDATA, "get hit data");
+    // don't get hit data, just send what is stored in the 8266
+//    sendCommandWithoutData(HITDATA, "get hit data");
     server.send(200, "application/json", "{\"data\":\"\"}");
     }
   else {
@@ -170,7 +172,7 @@ void handleGetHitData() {
       }
     }
     json += String("\"]}");
-    Serial.println(json);
+//    Serial.println(json);
     server.send(200, "application/json", json);
   }
 }
@@ -366,7 +368,7 @@ void getLocalStatus() {
   Serial.println("===================================================");
   Serial.println(String("Poll count is ") + String(pollCount));
   Serial.println(String("Peer status is ") + String(slaveState));
-  Serial.println(String("Web counts are ") + String(webCount) + String(" ") + String(webStatusCount));
+  Serial.println(String("Web counts are ") + String(webCount) + String(" ") + String(webStatusCount) + " " + String(webHitCount));
   Serial.println(String("Local hit data is ") + hitData);
   Serial.println("===================================================");
 }
