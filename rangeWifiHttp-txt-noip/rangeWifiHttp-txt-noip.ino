@@ -379,6 +379,7 @@ void sendCommandWithoutData(unsigned char cmd, String cmdName) {
   SPI.transfer((char)cmd);
   debugMsgStr("sending command: ", cmdName, true);
 
+  delay(2);
   // No length
   SPI.transfer((char)0);
 
@@ -465,6 +466,9 @@ void resetSlave()
     digitalWrite(resetPin, LOW);
     delay(500);
     digitalWrite(resetPin, HIGH);
+  }
+  else {
+    sendCommandWithoutData(RESETCMD, "reset");
   }
 }
 
