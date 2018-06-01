@@ -10,21 +10,21 @@
 // Enables debug print outs
 #define DEBUG 1
 // Set to 1 to disable reset logic from NodeMCU (ESP8266 board)
-#define DISABLE_RESET 0
+#define DISABLE_RESET 1
 
-//
-// Configure IP/Gateway - fixed IP 192.168.1.100
-//
-IPAddress ip(192, 168, 1, 100);
-IPAddress gateway(192, 168, 1, 254);
-IPAddress netmask(255, 255, 255, 0);
+// Commented out to allow WiFi to select address
+//IPAddress ip(192, 168, 0, 101);
+//IPAddress gateway(192, 168, 0, 1);
+//IPAddress netmask(255, 255, 255, 0);
 //
 // WiFi SSID / password
-//
+////
 //const char* ssid = "ML-guest";
 //const char* password = "mlguest538!";
-const char *ssid = "ATTVMb9amS";
-const char *password = "xmcpmjhvr7u7";
+//const char *ssid = "ATTVMb9amS";
+//const char *password = "xmcpmjhvr7u7";
+const char *ssid = "TXTdev";
+const char *password = "Shoot999";
 
 // Commands between NodeMCU and Arduino SPI slave
 #define RESETCMD 1
@@ -47,7 +47,7 @@ const char *password = "xmcpmjhvr7u7";
 // This is the 
 int resetPin = D1;
 // Poll arduino only every serialPollRate msec
-int serialPollRate = 100;
+int serialPollRate = 400;
 int serialPollLast = millis();
 
 // State of the arduino
@@ -59,6 +59,8 @@ unsigned char slaveState = 0;
 
 // Status counters - used to debug connection status
 int pollCount = 0;
+int webStatusCount = 0;
+int webHitCount = 0;
 int webCount = 0;
 // Last value of hitData received.
 String hitData;
@@ -75,7 +77,7 @@ void handleRoot() {
 
 // Status route - http://<address>/status
 void handleStatus() {
-  webCount++;
+  webStatusCount++;
   String resp = "{ \"status\": \"";
   switch (slaveState) {
     case READY_STATE:
@@ -96,8 +98,10 @@ void handleStatus() {
 // Start (run) route - http://<address>/start
 void handleStart() {
   webCount++;
+  hitData = "";
   server.send(200, "application/json", "{}");
   // Send RUN command to arduino
+  Serial.println("Run command");
   sendCommandWithoutData(RUNCMD, "run");
 }
 
@@ -141,22 +145,34 @@ void handleFunction7() {
 // Reset route - http://<address>/reset
 void handleReset() {
   webCount++;
+  hitData = "";
   server.send(200, "application/json", "{}");
   // reset arduino device and clear current hitData
+  Serial.println("Reset command");
   resetSlave();
-  hitData = "";
 }
 
 // Get hit data route - http://<address>/hitData
 void handleGetHitData() {
-  webCount++;
+//  Serial.println(String("getHitData: ") + hitData);
+  webHitCount++;
   if (hitData.length() == 0) {
-    sendCommandWithoutData(HITDATA, "get hit data");
+    // don't get hit data, just send what is stored in the 8266
+//    sendCommandWithoutData(HITDATA, "get hit data");
     server.send(200, "application/json", "{\"data\":\"\"}");
     }
   else {
-    String json = "{\"data\":\"";
-    json += hitData + String("\"}");
+    String json = "{\"data\":[\"";
+    for (int i = 0; i < hitData.length(); i++) {
+      if (hitData[i] == '\n') {
+        json += "\",\"";
+      }
+      if (hitData[i] >= ' ') {
+        json += hitData[i];     
+      }
+    }
+    json += String("\"]}");
+//    Serial.println(json);
     server.send(200, "application/json", json);
   }
 }
@@ -187,7 +203,8 @@ void setup()
   Serial.print("Connecting to ");
   Serial.println(ssid);
   WiFi .mode(WIFI_STA);
-  WiFi.config(ip, gateway, netmask);
+  // commented out to allow WiFi to pick address
+//  WiFi.config(ip, gateway, netmask);
   WiFi.begin(ssid, password);
 
   while (WiFi.status() != WL_CONNECTED)
@@ -228,7 +245,8 @@ void setup()
   server.onNotFound(handleNotFound);
   
   // Send test string to arduino (put this is a function?)
-  String testString = "SPI Interface Initialized\n";
+  String testString = "SPI Interface Initialized, IP address: ";
+  testString += WiFi.localIP().toString();
   SPI.transfer((char)MSG);
   debugMsgInt("sending command: ", MSG, true);
   SPI.transfer((char)testString.length());
@@ -266,7 +284,14 @@ void getJobMenu() {
  Serial.println("1. get local status");
  Serial.println("2. run exercise");
  Serial.println("3. get hit data");
- Serial.println("4. reset arduino");
+ Serial.println("4. function 1");
+ Serial.println("5. function 2");
+ Serial.println("7. function 3");
+ Serial.println("8. function 4");
+ Serial.println("9. function 5");
+ Serial.println("10. function 6");
+ Serial.println("11. function 7");
+ Serial.println("12. reset arduino");
  Serial.println("99. EXIT");
 }
 
@@ -302,6 +327,27 @@ void getJob(){
         sendCommandWithoutData(HITDATA, "get hit data");
         break;
       case 4:
+        sendCommandWithoutData(F1CMD, "function 1");
+        break;
+      case 5:
+        sendCommandWithoutData(F2CMD, "function 2");
+        break;
+      case 6:
+        sendCommandWithoutData(F3CMD, "function 3");
+        break;
+      case 7:
+        sendCommandWithoutData(F4CMD, "function 4");
+        break;
+      case 8:
+        sendCommandWithoutData(F5CMD, "function 5");
+        break;
+      case 9:
+        sendCommandWithoutData(F6CMD, "function 6");
+        break;
+      case 10:
+        sendCommandWithoutData(F7CMD, "function 7");
+        break;
+      case 11:
         resetSlave();
         break;
       case 99:
@@ -322,7 +368,7 @@ void getLocalStatus() {
   Serial.println("===================================================");
   Serial.println(String("Poll count is ") + String(pollCount));
   Serial.println(String("Peer status is ") + String(slaveState));
-  Serial.println(String("Web count is ") + String(webCount));
+  Serial.println(String("Web counts are ") + String(webCount) + String(" ") + String(webStatusCount) + " " + String(webHitCount));
   Serial.println(String("Local hit data is ") + hitData);
   Serial.println("===================================================");
 }
@@ -333,6 +379,7 @@ void sendCommandWithoutData(unsigned char cmd, String cmdName) {
   SPI.transfer((char)cmd);
   debugMsgStr("sending command: ", cmdName, true);
 
+  delay(2);
   // No length
   SPI.transfer((char)0);
 
@@ -341,7 +388,6 @@ void sendCommandWithoutData(unsigned char cmd, String cmdName) {
   // Receive and process any response
   unsigned char recvCommand;
   String response = recvSerial(&recvCommand);
-  debugMsgInt("Command rcv: ", (int)recvCommand, true);
   Serial.println(response);
   
   handleCommand(recvCommand, response);
@@ -371,16 +417,18 @@ void handleCommand(unsigned char command, String& data) {
     case POLLCMD:
     {
       pollCount++;
-      unsigned char newState = data[0];
-      if (newState != slaveState) {
-        Serial.println(String("arduino state change, new state ") + String((int)newState));
-        slaveState = newState;
+      if (data.length() > 0) {
+        unsigned char newState = data[0];
+        if (newState != slaveState) {
+          Serial.println(String("arduino state change, new state ") + String((int)newState));
+          slaveState = newState;
+        }
       }
     }
     break;
     case HITDATA:
     {
-      hitData = data;
+      hitData += data + "\n";
       Serial.println(String("Hit Data Received:") + data);
     }
     break;
@@ -418,6 +466,9 @@ void resetSlave()
     digitalWrite(resetPin, LOW);
     delay(500);
     digitalWrite(resetPin, HIGH);
+  }
+  else {
+    sendCommandWithoutData(RESETCMD, "reset");
   }
 }
 
