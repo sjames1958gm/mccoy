@@ -41,7 +41,7 @@ volatile int spi_pollCount = 0;
 
 // Variable to prevent simulataneous sends
 bool sendOnSpi = false;
-
+#define RESETCMD 1
 #define PINGCMD 2
 #define POLLCMD 3
 #define MSG 7
@@ -197,39 +197,55 @@ void monitorSpi() {
     spi_sendCommand = POLLCMD;  
     spi_state = SPI_STATE_SENDCMD;
 
+    String data;
+
     switch (locCommand) {
+      case RESETCMD:
+        Serial.println("Idle command received");
+        status = STATUS_IDLE;
+        hitData = "";
+        break;
       case RUNCMD:
         Serial.println("Run command received");
         status = STATUS_RUNNING;
         runTimer = millis();
+        hitData = "";
       break;
       case HITDATA:
+      // Current design is to send hitdata from mega when desired.
+      // polling for hit data is not done anymore
         Serial.println("Get hit data command received");
         sendToSpiPeer(HITDATA, hitData.c_str(), hitData.length());
       break;
       case F1CMD:
-        Serial.println("Function 1 command received");
+        hitData = "Function 1 command received";
       break;
       case F2CMD:
-        Serial.println("Function 2 command received");
+        hitData = "Function 2 command received";
       break;
       case F3CMD:
-        Serial.println("Function 3 command received");
-      break;
+        hitData = "Function 3 command received";
+      break;  
       case F4CMD:
-        Serial.println("Function 4 command received");
+        hitData = "Function 4 command received";
       break;
       case F5CMD:
-        Serial.println("Function 5 command received");
+        hitData = "Function 5 command received";
       break;
       case F6CMD:
-        Serial.println("Function 6 command received");
+        hitData = "Function 6 command received";
       break;
       case F7CMD:
-        Serial.println("Function 7 command received");
+        hitData = "Function 7 command received";
       break;
       default:
         Serial.println(String("Unknown command: ") + String(locCommand));
+    }
+
+    if (hitData.length() > 0) {
+        Serial.println(hitData);
+        // HITDATA is not really Hit Data anymore, but any data from Mega
+        sendToSpiPeer(HITDATA, hitData.c_str(), hitData.length());
     }
   }
   delay(1);
@@ -246,6 +262,9 @@ void sendToSpiPeer(unsigned char cmd, char* buffer, int len) {
     api_sendLength = len;
     api_sendCommand = cmd;
     sendOnSpi = true;
+  }
+  else {
+    Serial.println("Cannot send sendOnSpi = true?");
   }
 }
 
