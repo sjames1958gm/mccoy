@@ -191,7 +191,7 @@ void setup()
   SPI.begin();
 
   // Reset the slave
-  resetSlave();
+//  resetSlave();
 
   // Wait for configured delay to allow arduino to reset
   delay(resetDelay);
