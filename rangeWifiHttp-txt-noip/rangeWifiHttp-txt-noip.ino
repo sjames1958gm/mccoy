@@ -48,7 +48,7 @@ const char *password = "Shoot999";
 int resetPin = D1;
 // Poll arduino only every serialPollRate msec
 int serialPollRate = 400;
-int serialPollLast = millis();
+unsigned long serialPollLast = millis();
 
 // State of the arduino
 // 1 - ready, 2 - running, 3 - run complete
@@ -395,7 +395,7 @@ void sendCommandWithoutData(unsigned char cmd, String cmdName) {
 
 // Poll the serial port if serialPollRate time has passed
 void handleSerial() {
-  int now = millis();
+  unsigned long now = millis();
   if (now - serialPollLast > serialPollRate) {
     
     SPI.transfer((char)POLLCMD);
